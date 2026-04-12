@@ -77,13 +77,38 @@
           <el-input v-model="form.deployPath" placeholder="/opt/apps/service-name" />
         </el-form-item>
         <el-form-item label="运行时类型">
-          <el-select v-model="form.runtimeType">
+          <el-select v-model="form.runtimeType" @change="onRuntimeTypeChange">
             <el-option label="Java" value="java" />
             <el-option label="Node.js" value="node" />
             <el-option label="Python" value="python" />
           </el-select>
         </el-form-item>
-        <el-form-item label="JVM参数">
+        <el-form-item label="JDK版本" v-if="form.runtimeType === 'java'">
+          <el-select v-model="form.runtimeVersion" placeholder="选择 JDK 版本">
+            <el-option label="JDK 8" value="8" />
+            <el-option label="JDK 11" value="11" />
+            <el-option label="JDK 17" value="17" />
+            <el-option label="JDK 21" value="21" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Node.js版本" v-if="form.runtimeType === 'node'">
+          <el-select v-model="form.runtimeVersion" placeholder="选择 Node.js 版本">
+            <el-option label="Node 16" value="16" />
+            <el-option label="Node 18" value="18" />
+            <el-option label="Node 20" value="20" />
+            <el-option label="Node 22" value="22" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Python版本" v-if="form.runtimeType === 'python'">
+          <el-select v-model="form.runtimeVersion" placeholder="选择 Python 版本">
+            <el-option label="Python 3.8" value="3.8" />
+            <el-option label="Python 3.9" value="3.9" />
+            <el-option label="Python 3.10" value="3.10" />
+            <el-option label="Python 3.11" value="3.11" />
+            <el-option label="Python 3.12" value="3.12" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="JVM参数" v-if="form.runtimeType === 'java'">
           <el-input v-model="form.jvmOptions" placeholder="-Xms512m -Xmx1024m" />
         </el-form-item>
         <el-form-item label="健康检查路径">
@@ -117,6 +142,7 @@ const dialogVisible = ref(false)
 const form = reactive({
   instanceName: '', moduleId: null, serverId: null,
   listenPort: 8080, deployPath: '', runtimeType: 'java',
+  runtimeVersion: '17',
   jvmOptions: '', healthCheckPath: '/actuator/health'
 })
 
@@ -155,9 +181,14 @@ const showDialog = () => {
   Object.assign(form, {
     instanceName: '', moduleId: null, serverId: null,
     listenPort: 8080, deployPath: '', runtimeType: 'java',
+    runtimeVersion: '17',
     jvmOptions: '', healthCheckPath: '/actuator/health'
   })
   dialogVisible.value = true
+}
+
+const onRuntimeTypeChange = () => {
+  form.runtimeVersion = ''
 }
 
 const onModuleChange = () => {
