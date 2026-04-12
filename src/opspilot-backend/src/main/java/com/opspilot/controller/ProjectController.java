@@ -36,8 +36,9 @@ public class ProjectController {
 
     @PostMapping
     public Result<Project> create(@RequestBody Project project, HttpServletRequest request) {
-        projectService.save(project);
         Long userId = (Long) request.getAttribute("userId");
+        project.setOwnerId(userId);
+        projectService.save(project);
         operationLogService.logOperation(userId, "project", "CREATE", "PROJECT", project.getId(),
                 project.getProjectName(), "创建项目", "success", request.getRemoteAddr());
         return Result.success(project);
