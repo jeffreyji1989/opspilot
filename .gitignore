@@ -1,1 +1,3 @@
 src/opspilot-backend/target/*.jar
+node_modules/
+.vite/
