@@ -19,6 +19,10 @@ public class Module {
     private String buildTool;
     private String buildCommand;
     private String artifactPath;
+    /** 运行时类型，为空则继承项目配置 */
+    private String runtimeType;
+    /** 运行时版本，为空则继承项目配置 */
+    private String runtimeVersion;
     private Integer status;
     @TableLogic
     private Integer deleted;

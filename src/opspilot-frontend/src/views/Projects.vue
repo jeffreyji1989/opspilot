@@ -18,6 +18,11 @@
       <el-table :data="tableData" v-loading="loading" style="width: 100%">
         <el-table-column prop="projectCode" label="项目编码" width="140" />
         <el-table-column prop="projectName" label="项目名称" />
+        <el-table-column label="运行时" width="140">
+          <template #default="{ row }">
+            {{ projectRuntimeLabel(row.runtimeType, row.runtimeVersion) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="businessLine" label="业务线" width="120" />
         <el-table-column prop="tags" label="标签" width="160" />
         <el-table-column prop="createTime" label="创建时间" width="170" />
@@ -58,6 +63,38 @@
         </el-form-item>
         <el-form-item label="标签">
           <el-input v-model="projectForm.tags" placeholder="逗号分隔" />
+        </el-form-item>
+        <el-form-item label="运行时类型">
+          <el-select v-model="projectForm.runtimeType" @change="onRuntimeTypeChange">
+            <el-option label="Java" value="java" />
+            <el-option label="Node.js" value="node" />
+            <el-option label="Python" value="python" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="JDK版本" v-if="projectForm.runtimeType === 'java'">
+          <el-select v-model="projectForm.runtimeVersion" placeholder="选择 JDK 版本">
+            <el-option label="JDK 8" value="8" />
+            <el-option label="JDK 11" value="11" />
+            <el-option label="JDK 17" value="17" />
+            <el-option label="JDK 21" value="21" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Node.js版本" v-if="projectForm.runtimeType === 'node'">
+          <el-select v-model="projectForm.runtimeVersion" placeholder="选择 Node.js 版本">
+            <el-option label="Node 16" value="16" />
+            <el-option label="Node 18" value="18" />
+            <el-option label="Node 20" value="20" />
+            <el-option label="Node 22" value="22" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Python版本" v-if="projectForm.runtimeType === 'python'">
+          <el-select v-model="projectForm.runtimeVersion" placeholder="选择 Python 版本">
+            <el-option label="Python 3.8" value="3.8" />
+            <el-option label="Python 3.9" value="3.9" />
+            <el-option label="Python 3.10" value="3.10" />
+            <el-option label="Python 3.11" value="3.11" />
+            <el-option label="Python 3.12" value="3.12" />
+          </el-select>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="projectForm.description" type="textarea" :rows="3" />
@@ -141,13 +178,18 @@ const keyword = ref('')
 
 const projectVisible = ref(false)
 const isEdit = ref(false)
-const projectForm = reactive({ id: null, projectCode: '', projectName: '', businessLine: '', tags: '', description: '' })
+const projectForm = reactive({ id: null, projectCode: '', projectName: '', businessLine: '', tags: '', description: '', runtimeType: 'java', runtimeVersion: '17' })
 
 const moduleVisible = ref(false)
 const currentProject = ref(null)
 const modules = ref([])
 const moduleFormVisible = ref(false)
 const moduleForm = reactive({ id: null, moduleName: '', repoUrl: '', repoBranch: 'main', repoPath: '', buildTool: 'maven', buildCommand: '', artifactPath: '' })
+
+const projectRuntimeLabel = (type, version) => {
+  const typeMap = { java: 'Java', node: 'Node.js', python: 'Python' }
+  return version ? `${typeMap[type] || type} ${version}` : (typeMap[type] || type || '-')
+}
 
 const fetchData = async () => {
   loading.value = true
@@ -163,11 +205,15 @@ const fetchData = async () => {
 const showProjectDialog = (row) => {
   isEdit.value = !!row
   if (row) {
-    Object.assign(projectForm, row)
+    Object.assign(projectForm, { ...row, runtimeType: row.runtimeType || 'java', runtimeVersion: row.runtimeVersion || '17' })
   } else {
-    Object.assign(projectForm, { id: null, projectCode: '', projectName: '', businessLine: '', tags: '', description: '' })
+    Object.assign(projectForm, { id: null, projectCode: '', projectName: '', businessLine: '', tags: '', description: '', runtimeType: 'java', runtimeVersion: '17' })
   }
   projectVisible.value = true
+}
+
+const onRuntimeTypeChange = () => {
+  projectForm.runtimeVersion = ''
 }
 
 const saveProject = async () => {

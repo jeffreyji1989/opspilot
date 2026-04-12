@@ -33,7 +33,11 @@
         <el-table-column prop="listenPort" label="端口" width="80" />
         <el-table-column prop="deployPath" label="部署路径" show-overflow-tooltip />
         <el-table-column prop="currentVersion" label="当前版本" width="180" />
-        <el-table-column prop="runtimeType" label="类型" width="80" />
+        <el-table-column label="运行时" width="120">
+          <template #default="{ row }">
+            {{ runtimeTypeLabel(row.runtimeType, row.runtimeVersion) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="$router.push(`/services/${row.id}`)">详情</el-button>
@@ -76,37 +80,9 @@
         <el-form-item label="部署路径" required>
           <el-input v-model="form.deployPath" placeholder="/opt/apps/service-name" />
         </el-form-item>
-        <el-form-item label="运行时类型">
-          <el-select v-model="form.runtimeType" @change="onRuntimeTypeChange">
-            <el-option label="Java" value="java" />
-            <el-option label="Node.js" value="node" />
-            <el-option label="Python" value="python" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="JDK版本" v-if="form.runtimeType === 'java'">
-          <el-select v-model="form.runtimeVersion" placeholder="选择 JDK 版本">
-            <el-option label="JDK 8" value="8" />
-            <el-option label="JDK 11" value="11" />
-            <el-option label="JDK 17" value="17" />
-            <el-option label="JDK 21" value="21" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Node.js版本" v-if="form.runtimeType === 'node'">
-          <el-select v-model="form.runtimeVersion" placeholder="选择 Node.js 版本">
-            <el-option label="Node 16" value="16" />
-            <el-option label="Node 18" value="18" />
-            <el-option label="Node 20" value="20" />
-            <el-option label="Node 22" value="22" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Python版本" v-if="form.runtimeType === 'python'">
-          <el-select v-model="form.runtimeVersion" placeholder="选择 Python 版本">
-            <el-option label="Python 3.8" value="3.8" />
-            <el-option label="Python 3.9" value="3.9" />
-            <el-option label="Python 3.10" value="3.10" />
-            <el-option label="Python 3.11" value="3.11" />
-            <el-option label="Python 3.12" value="3.12" />
-          </el-select>
+        <el-form-item label="运行时" v-if="form.runtimeType">
+          <el-tag>{{ runtimeLabel }}</el-tag>
+          <span style="margin-left: 8px; color: #909399; font-size: 12px;">（继承自项目配置）</span>
         </el-form-item>
         <el-form-item label="JVM参数" v-if="form.runtimeType === 'java'">
           <el-input v-model="form.jvmOptions" placeholder="-Xms512m -Xmx1024m" />
@@ -124,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import api from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -137,6 +113,7 @@ const moduleId = ref(null)
 const statusFilter = ref(null)
 const modules = ref([])
 const servers = ref([])
+const projects = ref([])
 
 const dialogVisible = ref(false)
 const form = reactive({
@@ -148,6 +125,10 @@ const form = reactive({
 
 const statusType = (s) => s === 1 ? 'success' : 'info'
 const statusName = (s) => s === 1 ? '运行中' : '已停止'
+const runtimeTypeLabel = (type, version) => {
+  const typeMap = { java: 'Java', node: 'Node.js', python: 'Python' }
+  return version ? `${typeMap[type] || type} ${version}` : (typeMap[type] || type)
+}
 
 const fetchData = async () => {
   loading.value = true
@@ -165,8 +146,8 @@ const fetchData = async () => {
 
 const fetchModules = async () => {
   const res = await api.get('/projects?pageNum=1&pageSize=100')
-  const projects = res.data.records
-  for (const p of projects) {
+  projects.value = res.data.records
+  for (const p of projects.value) {
     const mr = await api.get(`/projects/${p.id}/modules`)
     modules.value.push(...mr.data)
   }
@@ -180,21 +161,28 @@ const fetchServers = async () => {
 const showDialog = () => {
   Object.assign(form, {
     instanceName: '', moduleId: null, serverId: null,
-    listenPort: 8080, deployPath: '', runtimeType: 'java',
-    runtimeVersion: '17',
+    listenPort: 8080, deployPath: '', runtimeType: '', runtimeVersion: '',
     jvmOptions: '', healthCheckPath: '/actuator/health'
   })
   dialogVisible.value = true
 }
 
-const onRuntimeTypeChange = () => {
-  form.runtimeVersion = ''
-}
+const runtimeLabel = computed(() => {
+  const typeMap = { java: 'Java', node: 'Node.js', python: 'Python' }
+  const type = typeMap[form.runtimeType] || form.runtimeType
+  return form.runtimeVersion ? `${type} ${form.runtimeVersion}` : type
+})
 
 const onModuleChange = () => {
   const m = modules.value.find(m => m.id === form.moduleId)
   if (m) {
     form.deployPath = `/opt/apps/${m.moduleName}`
+    // 继承项目的运行时配置
+    const project = projects.value.find(p => p.id === m.projectId)
+    if (project) {
+      form.runtimeType = project.runtimeType || 'java'
+      form.runtimeVersion = project.runtimeVersion || '17'
+    }
   }
 }
 
