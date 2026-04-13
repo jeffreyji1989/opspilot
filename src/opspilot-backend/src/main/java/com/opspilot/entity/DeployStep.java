@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 
 @Data
 @TableName("t_deploy_step")
@@ -21,4 +22,46 @@ public class DeployStep {
     private String errorMessage;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    // ==================== 兼容字段（代码中使用简写名称） ====================
+
+    /**
+     * 兼容字段：映射到 deployRecordId
+     */
+    public void setRecordId(Long recordId) {
+        this.deployRecordId = recordId;
+    }
+
+    public Long getRecordId() {
+        return this.deployRecordId;
+    }
+
+    /**
+     * 兼容字段：映射到 stepOrder
+     */
+    public void setStepNo(Integer stepNo) {
+        this.stepOrder = stepNo;
+    }
+
+    public Integer getStepNo() {
+        return this.stepOrder;
+    }
+
+    /**
+     * 兼容字段：映射到 createTime
+     */
+    public void setCreatedTime(Date createdTime) {
+        if (createdTime != null) {
+            this.createTime = createdTime.toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime();
+        }
+    }
+
+    public Date getCreatedTime() {
+        if (this.createTime != null) {
+            return Date.from(this.createTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
+        }
+        return null;
+    }
 }

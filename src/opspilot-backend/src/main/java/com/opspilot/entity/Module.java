@@ -25,6 +25,10 @@ public class Module {
     private Integer deleted;
     private Date createdTime;
     private Date updatedTime;
+    /**
+     * 构建工具类型 (maven/npm/gradle等)
+     */
+    private String buildTool;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -58,4 +62,6 @@ public class Module {
     public void setCreatedTime(Date createdTime) { this.createdTime = createdTime; }
     public Date getUpdatedTime() { return updatedTime; }
     public void setUpdatedTime(Date updatedTime) { this.updatedTime = updatedTime; }
+    public String getBuildTool() { return buildTool; }
+    public void setBuildTool(String buildTool) { this.buildTool = buildTool; }
 }

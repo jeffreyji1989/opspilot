@@ -103,6 +103,71 @@ public class SshManager {
         }
     }
 
+    /**
+     * Execute command on server via SSH (or locally if server is null)
+     */
+    public String executeCommand(String command, Server server, int timeoutSeconds) {
+        try {
+            if (server == null) {
+                return executeLocalCommand(command, timeoutSeconds);
+            }
+            SSHClient ssh = connect(server);
+            try {
+                return executeCommand(ssh, command, timeoutSeconds);
+            } finally {
+                ssh.close();
+            }
+        } catch (IOException e) {
+            log.error("SSH命令执行失败: {}, 错误: {}", command, e.getMessage());
+            throw new RuntimeException("SSH命令执行失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Upload file to remote server via SCP
+     */
+    public boolean uploadFile(String localPath, String remotePath, Server server) {
+        try {
+            SSHClient ssh = connect(server);
+            try {
+                net.schmizz.sshj.xfer.scp.SCPFileTransfer scp = ssh.newSCPFileTransfer();
+                scp.upload(localPath, remotePath);
+                log.info("文件上传成功: {} -> {}@{}:{}", localPath, server.getSshUsername(), server.getHostname(), remotePath);
+                return true;
+            } finally {
+                ssh.close();
+            }
+        } catch (IOException e) {
+            log.error("文件上传失败: {}, 错误: {}", localPath, e.getMessage());
+            throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Execute command locally
+     */
+    private String executeLocalCommand(String command, int timeoutSeconds) throws IOException {
+        log.info("执行本地命令: {}", command);
+        ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        try {
+            boolean completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            String output = IOUtils.readFully(process.getInputStream()).toString();
+            if (!completed) {
+                process.destroyForcibly();
+                throw new IOException("本地命令执行超时: " + command);
+            }
+            if (process.exitValue() != 0) {
+                log.warn("本地命令退出码 {}: {}", process.exitValue(), command);
+            }
+            return output;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("本地命令执行中断: " + command);
+        }
+    }
+
     public static String generateKeyPair(String outputPath) throws IOException {
         // Generate SSH key pair using ssh-keygen
         Path path = Paths.get(outputPath);

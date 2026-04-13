@@ -23,7 +23,7 @@
         <jwt.version>0.12.5</jwt.version>
         <sshj.version>0.38.0</sshj.version>
         <quartz.version>2.3.2</quartz.version>
-        <lombok.version>1.18.36</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencies>

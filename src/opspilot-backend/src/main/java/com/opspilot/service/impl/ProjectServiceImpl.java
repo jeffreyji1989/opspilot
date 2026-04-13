@@ -46,7 +46,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         return moduleMapper.selectList(
                 new LambdaQueryWrapper<Module>()
                         .eq(Module::getProjectId, projectId)
-                        .orderByAsc(Module::getCreateTime));
+                        .orderByAsc(Module::getCreatedTime));
     }
 
     @Override

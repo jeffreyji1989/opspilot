@@ -40,4 +40,11 @@ public class Result<T> implements Serializable {
         result.setData(data);
         return result;
     }
+
+    /**
+     * 判断是否成功
+     */
+    public boolean isSuccess() {
+        return this.code == 200;
+    }
 }

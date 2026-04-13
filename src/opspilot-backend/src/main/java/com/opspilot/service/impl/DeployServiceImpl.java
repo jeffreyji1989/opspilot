@@ -47,7 +47,7 @@ import java.util.List;
  * @since 2026-04-13
  */
 @Service
-public class DeployServiceImpl implements DeployService {
+public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.service.impl.ServiceImpl<DeployRecordMapper, DeployRecord> implements DeployService {
 
     private static final Logger log = LoggerFactory.getLogger(DeployServiceImpl.class);
 
@@ -209,8 +209,10 @@ public class DeployServiceImpl implements DeployService {
             // 全部成功
             updateRecordStatus(recordId, DeployStatusEnum.SUCCESS, "部署成功");
             serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.SUCCESS.getCode());
-            serviceInstanceMapper.updateCurrentVersion(instance.getId(), record.getVersion());
-            log.info("发版部署成功, recordId={}, version={}", recordId, record.getVersion() != null ? record.getVersion() : "unknown");
+            DeployRecord successRecord = deployRecordMapper.selectById(recordId);
+            String version = successRecord != null ? successRecord.getVersion() : "unknown";
+            serviceInstanceMapper.updateCurrentVersion(instance.getId(), version);
+            log.info("发版部署成功, recordId={}, version={}", recordId, version);
 
         } catch (Exception e) {
             log.error("发版部署异常, recordId={}", recordId, e);
@@ -240,7 +242,7 @@ public class DeployServiceImpl implements DeployService {
         // 如果已存在 .git 目录，执行 pull 更新
         if (FileUtil.exist(projectDir + "/.git")) {
             String pullCmd = String.format("cd %s && git pull origin %s", projectDir, branch);
-            String pullResult = SshManager.executeCommand(pullCmd, null, 120);
+            String pullResult = sshManager.executeCommand(pullCmd, null, 120);
             if (StrUtil.isBlank(pullResult) || pullResult.contains("Already up to date") || pullResult.contains("Updating")) {
                 log.info("代码更新成功, branch={}", branch);
             } else {
@@ -251,7 +253,7 @@ public class DeployServiceImpl implements DeployService {
             // 首次克隆
             FileUtil.mkdir(projectDir);
             String cloneCmd = String.format("git clone -b %s %s %s", branch, repoUrl, projectDir);
-            String cloneResult = SshManager.executeCommand(cloneCmd, null, 180);
+            String cloneResult = sshManager.executeCommand(cloneCmd, null, 180);
             if (cloneResult.contains("fatal") || cloneResult.contains("error")) {
                 log.error("代码克隆失败, repoUrl={}, result={}", repoUrl, cloneResult);
                 throw new RuntimeException("代码克隆失败: " + cloneResult);
@@ -276,7 +278,7 @@ public class DeployServiceImpl implements DeployService {
         }
 
         String fullCmd = String.format("cd %s && %s", projectDir, buildCmd);
-        String buildResult = SshManager.executeCommand(fullCmd, null, 300);
+        String buildResult = sshManager.executeCommand(fullCmd, null, 300);
 
         if (buildResult.contains("BUILD FAILURE") || buildResult.contains("ERROR") || buildResult.contains("error")) {
             log.error("编译构建失败, module={}, result={}", module.getModuleName(), buildResult);
@@ -349,12 +351,12 @@ public class DeployServiceImpl implements DeployService {
         String remotePath = deployPath + "/uploads/" + fileName;
 
         // 确保远程目录存在
-        SshManager.executeCommand(
+        sshManager.executeCommand(
                 String.format("mkdir -p %s/uploads", deployPath),
                 server, 30);
 
         // 上传文件
-        boolean uploaded = SshManager.uploadFile(artifactPath, remotePath, server);
+        boolean uploaded = sshManager.uploadFile(artifactPath, remotePath, server);
         if (!uploaded) {
             throw new RuntimeException("文件上传失败: " + artifactPath + " -> " + remotePath);
         }
@@ -382,14 +384,14 @@ public class DeployServiceImpl implements DeployService {
         String switchCmd = String.format(
                 "mkdir -p %s && cp %s/uploads/%s %s/%s",
                 versionDir, deployPath, fileName, versionDir, fileName);
-        String result = SshManager.executeCommand(switchCmd, server, 60);
+        String result = sshManager.executeCommand(switchCmd, server, 60);
         if (result.contains("No space left") || result.contains("Permission denied")) {
             throw new RuntimeException("切换版本失败: " + result);
         }
 
         // 切换软链
         String linkCmd = String.format("ln -sfn %s %s", versionDir, currentLink);
-        SshManager.executeCommand(linkCmd, server, 30);
+        sshManager.executeCommand(linkCmd, server, 30);
 
         log.info("版本切换成功, versionDir={}", versionDir);
     }
@@ -411,24 +413,23 @@ public class DeployServiceImpl implements DeployService {
         // 停止旧进程
         if (instance.getPid() != null) {
             String stopCmd = String.format("kill -15 %d", instance.getPid());
-            SshManager.executeCommand(stopCmd, server, 15);
+            sshManager.executeCommand(stopCmd, server, 15);
             log.info("已发送停止信号, pid={}", instance.getPid());
         }
 
         // 启动新版本
         if (StrUtil.isNotBlank(startCommand)) {
             String fullStartCmd = String.format("cd %s && %s &", currentLink, startCommand);
-            SshManager.executeCommand(fullStartCmd, server, 30);
+            sshManager.executeCommand(fullStartCmd, server, 30);
         } else {
             // 默认启动 JAR
-            String jarName = FileUtil.getName(FileUtil.loopFiles(new File("/tmp"), f -> f.getName().endsWith(".jar")));
             String defaultCmd;
             if (StrUtil.isNotBlank(jvmOptions)) {
                 defaultCmd = String.format("cd %s && nohup java %s -jar *.jar > app.log 2>&1 &", currentLink, jvmOptions);
             } else {
                 defaultCmd = String.format("cd %s && nohup java -jar *.jar > app.log 2>&1 &", currentLink);
             }
-            SshManager.executeCommand(defaultCmd, server, 30);
+            sshManager.executeCommand(defaultCmd, server, 30);
         }
 
         // 等待启动
@@ -457,7 +458,7 @@ public class DeployServiceImpl implements DeployService {
             // HTTP 健康检查
             String checkCmd = String.format("curl -s -o /dev/null -w '%%{http_code}' --max-time 10 http://localhost:%d%s",
                     listenPort, healthCheckPath);
-            String statusCode = SshManager.executeCommand(checkCmd, server, 15);
+            String statusCode = sshManager.executeCommand(checkCmd, server, 15);
             if (!"200".equals(statusCode.trim())) {
                 throw new RuntimeException("健康检查失败, HTTP " + statusCode);
             }
@@ -465,7 +466,7 @@ public class DeployServiceImpl implements DeployService {
         } else {
             // 进程检查
             String processCmd = String.format("pgrep -f 'java.*%s'", instance.getDeployPath());
-            String pidResult = SshManager.executeCommand(processCmd, server, 10);
+            String pidResult = sshManager.executeCommand(processCmd, server, 10);
             if (StrUtil.isBlank(pidResult)) {
                 throw new RuntimeException("进程检查失败，服务未启动");
             }
@@ -531,7 +532,7 @@ public class DeployServiceImpl implements DeployService {
         try {
             // 查找上一个版本目录
             String listCmd = String.format("ls -lt %s | grep '^d' | head -2 | tail -1 | awk '{print $NF}'", versionsDir);
-            String prevVersion = SshManager.executeCommand(listCmd, server, 10);
+            String prevVersion = sshManager.executeCommand(listCmd, server, 10);
             prevVersion = StrUtil.isNotBlank(prevVersion) ? prevVersion.trim() : null;
 
             if (StrUtil.isBlank(prevVersion)) {
@@ -544,22 +545,22 @@ public class DeployServiceImpl implements DeployService {
 
             // 切换软链到上一版本
             String linkCmd = String.format("ln -sfn %s %s", prevVersionDir, currentLink);
-            SshManager.executeCommand(linkCmd, server, 10);
+            sshManager.executeCommand(linkCmd, server, 10);
 
             // 重启服务
             String stopCmd = String.format("pkill -f 'java.*%s'", deployPath);
-            SshManager.executeCommand(stopCmd, server, 15);
+            sshManager.executeCommand(stopCmd, server, 15);
             Thread.sleep(3000);
 
             String startCmd = String.format("cd %s && nohup java -jar *.jar > app.log 2>&1 &", currentLink);
-            SshManager.executeCommand(startCmd, server, 15);
+            sshManager.executeCommand(startCmd, server, 15);
             Thread.sleep(5000);
 
             // 健康检查
             if (instance.getListenPort() != null && StrUtil.isNotBlank(instance.getHealthCheckPath())) {
                 String checkCmd = String.format("curl -s -o /dev/null -w '%%{http_code}' --max-time 10 http://localhost:%d%s",
                         instance.getListenPort(), instance.getHealthCheckPath());
-                String statusCode = SshManager.executeCommand(checkCmd, server, 15);
+                String statusCode = sshManager.executeCommand(checkCmd, server, 15);
                 if (!"200".equals(statusCode.trim())) {
                     updateRecordStatus(recordId, DeployStatusEnum.FAILED, "回退后健康检查失败");
                     return;
@@ -677,5 +678,51 @@ public class DeployServiceImpl implements DeployService {
     private void updateRecordStatus(Long recordId, DeployStatusEnum status, String message) {
         deployRecordMapper.updateStatus(recordId, status.getCode());
         log.info("更新部署状态, recordId={}, status={}, message={}", recordId, status.getDescription(), message);
+    }
+
+    // ==================== IService 接口方法 ====================
+
+    @Override
+    public Long startDeploy(com.opspilot.dto.DeployRequest request, Long operatorId, String username) {
+        // 从实例获取moduleId
+        ServiceInstance instance = serviceInstanceMapper.selectById(request.getInstanceId());
+        if (instance == null || instance.getModuleId() == null) {
+            throw new com.opspilot.common.BusinessException("服务实例或模块不存在");
+        }
+        Result<Long> result = deploy(instance.getModuleId(), request.getInstanceId(), username);
+        return result.isSuccess() ? result.getData() : null;
+    }
+
+    @Override
+    public com.baomidou.mybatisplus.core.metadata.IPage<DeployRecord> pageDeployRecords(int pageNum, int pageSize, Long instanceId) {
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DeployRecord> wrapper =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        if (instanceId != null) {
+            wrapper.eq(DeployRecord::getInstanceId, instanceId);
+        }
+        wrapper.orderByDesc(DeployRecord::getCreateTime);
+        return page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize), wrapper);
+    }
+
+    @Override
+    public void cancelDeploy(Long deployRecordId) {
+        DeployRecord record = deployRecordMapper.selectById(deployRecordId);
+        if (record != null && record.getStatus() != null && record.getStatus() == DeployStatusEnum.RUNNING.getCode()) {
+            updateRecordStatus(deployRecordId, DeployStatusEnum.FAILED, "部署已取消");
+        }
+    }
+
+    @Override
+    public String getDeployLog(Long deployRecordId) {
+        List<DeployStep> steps = deployStepMapper.selectByRecordId(deployRecordId);
+        StringBuilder logBuilder = new StringBuilder();
+        for (DeployStep step : steps) {
+            logBuilder.append("[").append(step.getStepName()).append("] ");
+            if (step.getLogOutput() != null) {
+                logBuilder.append(step.getLogOutput());
+            }
+            logBuilder.append("\n");
+        }
+        return logBuilder.toString();
     }
 }
