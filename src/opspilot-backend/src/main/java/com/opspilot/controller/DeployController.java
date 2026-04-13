@@ -1,73 +1,97 @@
 package com.opspilot.controller;
 
-import com.opspilot.common.PageResult;
 import com.opspilot.common.Result;
-import com.opspilot.dto.DeployRequest;
 import com.opspilot.entity.DeployRecord;
 import com.opspilot.entity.DeployStep;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.opspilot.mapper.DeployStepMapper;
 import com.opspilot.service.DeployService;
-import com.opspilot.service.OperationLogService;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * 发版部署控制器
+ *
+ * <p>提供发版部署的 RESTful API，包括发起部署、查询进度、版本回退和查询历史记录。</p>
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 @RestController
-@RequestMapping("/api/deploys")
-@RequiredArgsConstructor
+@RequestMapping("/api/deploy")
 public class DeployController {
 
-    private final DeployService deployService;
-    private final DeployStepMapper deployStepMapper;
-    private final OperationLogService operationLogService;
+    private static final Logger log = LoggerFactory.getLogger(DeployController.class);
 
-    @PostMapping
-    public Result<Long> deploy(@Valid @RequestBody DeployRequest request, HttpServletRequest httpRequest) {
-        Long userId = (Long) httpRequest.getAttribute("userId");
-        String username = (String) httpRequest.getAttribute("username");
-        Long deployId = deployService.startDeploy(request, userId, username);
-        operationLogService.logOperation(userId, "deploy", "DEPLOY", "SERVICE", request.getInstanceId(),
-                "instance:" + request.getInstanceId(), "发版部署 branch=" + request.getGitBranch(),
-                "pending", httpRequest.getRemoteAddr());
-        return Result.success(deployId);
+    @Autowired
+    private DeployService deployService;
+
+    @Autowired
+    private DeployStepMapper deployStepMapper;
+
+    /**
+     * 发起发版部署
+     *
+     * @param request 包含 moduleId、instanceId、operator 的请求体
+     * @return 部署记录 ID
+     */
+    @PostMapping("/execute")
+    public Result<Long> executeDeploy(@RequestBody Map<String, Object> request) {
+        Long moduleId = Long.valueOf(request.get("moduleId").toString());
+        Long instanceId = Long.valueOf(request.get("instanceId").toString());
+        String operator = (String) request.getOrDefault("operator", "system");
+        return deployService.deploy(moduleId, instanceId, operator);
     }
 
-    @GetMapping
-    public Result<PageResult<DeployRecord>> list(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) Long instanceId) {
-        return Result.success(PageResult.of(deployService.pageDeployRecords(pageNum, pageSize, instanceId)));
+    /**
+     * 查询发版进度
+     *
+     * @param recordId 部署记录 ID
+     * @return 部署进度信息，包含各步骤详情
+     */
+    @GetMapping("/progress/{recordId}")
+    public Result<Map<String, Object>> getProgress(@PathVariable Long recordId) {
+        Result<DeployRecord> recordResult = deployService.getProgress(recordId);
+        if (!recordResult.isSuccess()) {
+            return Result.error(recordResult.getMessage());
+        }
+
+        DeployRecord record = recordResult.getData();
+        List<DeployStep> steps = deployStepMapper.selectByRecordId(recordId);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("record", record);
+        result.put("steps", steps);
+        return Result.success(result);
     }
 
-    @GetMapping("/{id}")
-    public Result<DeployRecord> getById(@PathVariable Long id) {
-        return Result.success(deployService.getById(id));
+    /**
+     * 版本回退
+     *
+     * <p>将指定实例回退到上一个稳定版本。</p>
+     *
+     * @param instanceId 实例 ID
+     * @return 回退记录 ID
+     */
+    @PostMapping("/rollback/{instanceId}")
+    public Result<Long> rollback(@PathVariable Long instanceId,
+                                 @RequestParam(defaultValue = "system") String operator) {
+        return deployService.rollback(instanceId, operator);
     }
 
-    @GetMapping("/{id}/steps")
-    public Result<List<DeployStep>> getSteps(@PathVariable Long id) {
-        return Result.success(deployStepMapper.selectList(
-                new LambdaQueryWrapper<DeployStep>()
-                        .eq(DeployStep::getDeployRecordId, id)
-                        .orderByAsc(DeployStep::getStepOrder)));
-    }
-
-    @GetMapping("/{id}/log")
-    public Result<String> getLog(@PathVariable Long id) {
-        return Result.success(deployService.getDeployLog(id));
-    }
-
-    @PostMapping("/{id}/cancel")
-    public Result<Void> cancel(@PathVariable Long id, HttpServletRequest request) {
-        deployService.cancelDeploy(id);
-        Long userId = (Long) request.getAttribute("userId");
-        operationLogService.logOperation(userId, "deploy", "CANCEL", "SERVICE", id,
-                "", "取消部署", "success", request.getRemoteAddr());
-        return Result.success();
+    /**
+     * 查询发版历史记录
+     *
+     * @param moduleId 模块 ID
+     * @return 部署历史列表
+     */
+    @GetMapping("/history/{moduleId}")
+    public Result<List<DeployRecord>> getHistory(@PathVariable Long moduleId) {
+        return deployService.getHistory(moduleId);
     }
 }

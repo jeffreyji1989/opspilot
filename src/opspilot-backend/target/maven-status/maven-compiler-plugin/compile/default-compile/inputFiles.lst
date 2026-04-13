@@ -39,6 +39,7 @@
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/entity/Project.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/controller/ProjectController.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/entity/GitCredential.java
+/Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/enums/DeployStatusEnum.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/controller/ServiceInstanceController.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/service/impl/DeployServiceImpl.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/common/PageResult.java
@@ -49,6 +50,7 @@
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/service/impl/ServerServiceImpl.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/config/WebSocketConfig.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/entity/DeployRecord.java
+/Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/config/AsyncConfig.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/entity/DeploySchedule.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/mapper/DeployRecordMapper.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/common/JwtUtil.java
@@ -57,6 +59,7 @@
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/OpsPilotApplication.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/dto/LoginRequest.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/controller/OperationLogController.java
+/Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/enums/DeployStepEnum.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/mapper/DeployStepMapper.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/task/DeployJob.java
 /Users/deffrey/.openclaw/workspace/projects/opspilot/src/opspilot-backend/src/main/java/com/opspilot/config/MyBatisPlusConfig.java
