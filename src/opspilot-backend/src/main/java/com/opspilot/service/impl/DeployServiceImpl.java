@@ -210,7 +210,7 @@ public class DeployServiceImpl implements DeployService {
             updateRecordStatus(recordId, DeployStatusEnum.SUCCESS, "部署成功");
             serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.SUCCESS.getCode());
             serviceInstanceMapper.updateCurrentVersion(instance.getId(), record.getVersion());
-            log.info("发版部署成功, recordId={}, version={}", recordId, record.getVersion());
+            log.info("发版部署成功, recordId={}, version={}", recordId, record.getVersion() != null ? record.getVersion() : "unknown");
 
         } catch (Exception e) {
             log.error("发版部署异常, recordId={}", recordId, e);
