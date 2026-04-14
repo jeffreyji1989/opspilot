@@ -55,9 +55,16 @@ mybatis-plus:
 
 opspilot:
   jwt:
-    secret: OpsPilotSecretKey2024ChangeMeInProduction
+    # ⚠️ 安全提示(SEC-001)：JWT 密钥必须通过环境变量 OPSPILOT_JWT_SECRET 注入，禁止使用默认值！
+    # 启动时会校验密钥是否为默认值，如果是默认值将拒绝启动。
+    # 生成方式: export OPSPILOT_JWT_SECRET=$(openssl rand -base64 64)
+    secret: ${OPSPILOT_JWT_SECRET:OpsPilotSecretKey2024ChangeMeInProduction}
     expiration: 86400000 # 24h
   aes:
+    # ⚠️ 安全提示(SEC-001)：AES 密钥必须通过环境变量 OPSPILOT_AES_KEY 注入，禁止使用默认值！
+    # 启动时会校验密钥是否为默认值，如果是默认值将拒绝启动。
+    # 用于加密 Git 凭证等敏感数据，建议不少于 32 字节。
+    # 生成方式: export OPSPILOT_AES_KEY=$(openssl rand -base64 32)
     key: ${OPSPILOT_AES_KEY:DefaultAesKey16Ch}
   ssh:
     private-key-path: ${user.home}/.opspilot/ssh/id_rsa

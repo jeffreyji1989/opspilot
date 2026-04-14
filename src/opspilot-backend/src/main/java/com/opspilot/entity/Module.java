@@ -1,67 +1,116 @@
 package com.opspilot.entity;
 
-import java.util.Date;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.time.LocalDateTime;
 
 /**
  * 模块实体
  *
+ * <p>对应数据库表 {@code t_module}，表示项目下的可独立部署模块。</p>
+ *
  * @author opspilot-team
  * @since 2026-04-13
  */
+@Data
+@TableName("t_module")
 public class Module {
+
+    @TableId(type = IdType.AUTO)
     private Long id;
+
     private Long projectId;
+
     private String moduleName;
+
+    /** 模块类型: java / node / python */
     private String moduleType;
+
+    /** Git 仓库地址 */
     private String repoUrl;
+
+    /** 分支名称，默认 main */
     private String repoBranch;
+
+    /** 仓库内子路径 */
     private String repoPath;
+
+    /** 构建命令，为空时默认使用 mvn clean package -DskipTests */
     private String buildCommand;
+
+    /** 构建产物路径 */
     private String artifactPath;
+
+    /** 部署路径 */
     private String deployPath;
+
+    /** 健康检查路径 */
     private String healthCheckPath;
+
+    /** 部署顺序 */
     private Integer deployOrder;
+
+    /** 模块描述 */
     private String description;
+
+    /** 逻辑删除标记 */
+    @TableLogic
     private Integer deleted;
-    private Date createdTime;
-    private Date updatedTime;
-    /**
-     * 构建工具类型 (maven/npm/gradle等)
-     */
+
+    /** 创建时间 */
+    private LocalDateTime createTime;
+
+    /** 更新时间 */
+    private LocalDateTime updateTime;
+
+    /** 构建工具类型 (maven/npm/gradle等) */
     private String buildTool;
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Long getProjectId() { return projectId; }
-    public void setProjectId(Long projectId) { this.projectId = projectId; }
-    public String getModuleName() { return moduleName; }
-    public void setModuleName(String moduleName) { this.moduleName = moduleName; }
-    public String getModuleType() { return moduleType; }
-    public void setModuleType(String moduleType) { this.moduleType = moduleType; }
-    public String getRepoUrl() { return repoUrl; }
-    public void setRepoUrl(String repoUrl) { this.repoUrl = repoUrl; }
-    public String getRepoBranch() { return repoBranch; }
-    public void setRepoBranch(String repoBranch) { this.repoBranch = repoBranch; }
-    public String getRepoPath() { return repoPath; }
-    public void setRepoPath(String repoPath) { this.repoPath = repoPath; }
-    public String getBuildCommand() { return buildCommand; }
-    public void setBuildCommand(String buildCommand) { this.buildCommand = buildCommand; }
-    public String getArtifactPath() { return artifactPath; }
-    public void setArtifactPath(String artifactPath) { this.artifactPath = artifactPath; }
-    public String getDeployPath() { return deployPath; }
-    public void setDeployPath(String deployPath) { this.deployPath = deployPath; }
-    public String getHealthCheckPath() { return healthCheckPath; }
-    public void setHealthCheckPath(String healthCheckPath) { this.healthCheckPath = healthCheckPath; }
-    public Integer getDeployOrder() { return deployOrder; }
-    public void setDeployOrder(Integer deployOrder) { this.deployOrder = deployOrder; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public Integer getDeleted() { return deleted; }
-    public void setDeleted(Integer deleted) { this.deleted = deleted; }
-    public Date getCreatedTime() { return createdTime; }
-    public void setCreatedTime(Date createdTime) { this.createdTime = createdTime; }
-    public Date getUpdatedTime() { return updatedTime; }
-    public void setUpdatedTime(Date updatedTime) { this.updatedTime = updatedTime; }
-    public String getBuildTool() { return buildTool; }
-    public void setBuildTool(String buildTool) { this.buildTool = buildTool; }
+    // ==================== 兼容字段 ====================
+
+    /**
+     * 兼容旧代码 setCreatedTime(Date) 调用，自动转换为 LocalDateTime
+     */
+    public void setCreatedTime(java.util.Date createdTime) {
+        if (createdTime != null) {
+            this.createTime = createdTime.toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime();
+        }
+    }
+
+    /**
+     * 兼容旧代码 getCreatedTime() 调用，返回 Date 类型
+     */
+    public java.util.Date getCreatedTime() {
+        if (this.createTime != null) {
+            return java.util.Date.from(this.createTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
+        }
+        return null;
+    }
+
+    /**
+     * 兼容旧代码 setUpdatedTime(Date) 调用，自动转换为 LocalDateTime
+     */
+    public void setUpdatedTime(java.util.Date updatedTime) {
+        if (updatedTime != null) {
+            this.updateTime = updatedTime.toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime();
+        }
+    }
+
+    /**
+     * 兼容旧代码 getUpdatedTime() 调用，返回 Date 类型
+     */
+    public java.util.Date getUpdatedTime() {
+        if (this.updateTime != null) {
+            return java.util.Date.from(this.updateTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
+        }
+        return null;
+    }
 }
