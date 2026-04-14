@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @since 2026-04-14
  */
 @RestController
-@RequestMapping("/api/settings")
+@RequestMapping("/api/system-settings")
 @RequiredArgsConstructor
 public class SystemSettingsController {
 
