@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsPilot - 服务器管理</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue"></script>
+  <style>
+    :root{--brand-50:#EEF2FF;--brand-500:#6366F1;--brand-600:#4F46E5;--success-50:#ECFDF5;--success-500:#10B981;--warning-50:#FFFBEB;--warning-500:#F59E0B;--error-50:#FEF2F2;--error-500:#EF4444;--info-50:#EFF6FF;--info-500:#3B82F6;--neutral-50:#F9FAFB;--neutral-100:#F3F4F6;--neutral-200:#E5E7EB;--neutral-300:#D1D5DB;--neutral-400:#9CA3AF;--neutral-500:#6B7280;--neutral-600:#4B5563;--neutral-700:#374151;--neutral-800:#1F2937;--neutral-900:#111827;--env-dev:#3B82F6;--env-test:#F59E0B;--env-staging:#8B5CF6;--env-prod:#EF4444;--sidebar-bg:#1E1E2D;--sidebar-hover:#2A2A3C;--sidebar-active:#6366F1;--sidebar-text:#A2A3B7;--sidebar-text-active:#FFFFFF;--radius-sm:4px;--radius-md:8px;--shadow-sm:0 1px 2px rgba(0,0,0,0.05)}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Inter,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--neutral-50);color:var(--neutral-700);font-size:14px}
+    .layout{display:flex;min-height:100vh}
+    .sidebar{width:240px;background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow:hidden}
+    .sidebar.collapsed{width:64px}
+    .sidebar-logo{height:56px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-logo .logo-icon{font-size:24px;margin-right:12px}.sidebar-logo .logo-text{font-size:18px;font-weight:700;color:#fff;white-space:nowrap}
+    .sidebar-menu{flex:1;padding:12px 8px;overflow-y:auto}
+    .menu-item{display:flex;align-items:center;padding:10px 16px;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:all .15s;color:var(--sidebar-text);text-decoration:none}
+    .menu-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
+    .menu-item.active{background:var(--sidebar-active);color:#fff;font-weight:500}
+    .menu-item .icon{width:20px;margin-right:12px;font-size:16px;flex-shrink:0;text-align:center}
+    .sidebar.collapsed .label,.sidebar.collapsed .logo-text{display:none}
+    .sidebar.collapsed .menu-item{justify-content:center;padding:10px}.sidebar.collapsed .menu-item .icon{margin-right:0}
+    .main-content{flex:1;margin-left:240px;display:flex;flex-direction:column;transition:margin-left .3s}
+    .sidebar.collapsed~.main-content{margin-left:64px}
+    .topbar{height:56px;background:#fff;border-bottom:1px solid var(--neutral-200);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+    .topbar-left{display:flex;align-items:center;gap:16px}
+    .collapse-btn{cursor:pointer;font-size:20px;color:var(--neutral-500)}
+    .breadcrumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--neutral-500)}
+    .breadcrumb .current{color:var(--neutral-800);font-weight:500}
+    .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-500);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;cursor:pointer}
+    .page-content{flex:1;padding:24px;max-width:1400px;width:100%}
+    .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .page-header h1{font-size:20px;font-weight:600;color:var(--neutral-900)}
+    .page-header p{font-size:13px;color:var(--neutral-500);margin-top:4px}
+    .env-group{margin-bottom:24px}
+    .env-group-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:16px;font-weight:600}
+    .env-group-header .env-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+    .env-group-header .count{font-size:13px;font-weight:400;color:var(--neutral-500)}
+    .server-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px}
+    .server-card{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);padding:20px;box-shadow:var(--shadow-sm);transition:box-shadow .15s;position:relative}
+    .server-card:hover{box-shadow:0 4px 6px -1px rgba(0,0,0,.1)}
+    .server-card.prod-card{border-left:3px solid var(--env-prod)}
+    .server-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+    .server-card-header .server-name{font-size:15px;font-weight:600;color:var(--neutral-800)}
+    .server-card-header .server-ip{font-size:13px;color:var(--neutral-500);font-family:monospace;margin-top:2px}
+    .status-badge{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+    .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .status-dot.online{background:var(--success-500)}
+    .status-dot.offline{background:var(--neutral-400)}
+    .status-dot.detecting{background:var(--info-500);animation:pulse 1.5s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+    .server-card-info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+    .info-item{font-size:13px;color:var(--neutral-500)}
+    .info-item span{color:var(--neutral-800);font-weight:500}
+    .server-card-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--neutral-100);padding-top:12px}
+    .card{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);box-shadow:var(--shadow-sm)}
+    .card-header{padding:16px 24px;border-bottom:1px solid var(--neutral-200);display:flex;justify-content:space-between;align-items:center}
+    .card-header h3{font-size:16px;font-weight:600;color:var(--neutral-800)}
+    .card-body{padding:24px}
+    .empty-state{text-align:center;padding:60px 20px}
+    .empty-state .empty-icon{font-size:64px;margin-bottom:16px}
+    .empty-state h4{font-size:16px;color:var(--neutral-700);margin-bottom:8px}
+    .empty-state p{font-size:13px;color:var(--neutral-500);margin-bottom:24px}
+    .prod-warning{border:1px solid var(--error-500);border-radius:8px;padding:12px 16px;background:var(--error-50);margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--error-600)}
+    .probe-result{margin-top:16px}
+    .probe-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--neutral-100);font-size:13px}
+    .probe-item:last-child{border-bottom:none}
+    .probe-item .label{color:var(--neutral-500)}
+    .probe-item .value{color:var(--neutral-800);font-weight:500}
+    @media(max-width:1440px){.page-content{max-width:1200px}}
+    @media(max-width:768px){.sidebar{width:64px}.sidebar .label,.sidebar .logo-text{display:none}.sidebar .menu-item{justify-content:center;padding:10px}.sidebar .menu-item .icon{margin-right:0}.main-content{margin-left:64px!important}.page-content{padding:16px}.server-cards{grid-template-columns:1fr}.page-header{flex-direction:column;gap:12px;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="layout">
+      <aside class="sidebar" :class="{collapsed:sidebarCollapsed}">
+        <div class="sidebar-logo"><span class="logo-icon">🚀</span><span class="logo-text">OpsPilot</span></div>
+        <nav class="sidebar-menu">
+          <a class="menu-item" href="dashboard.html"><span class="icon">🏠</span><span class="label">仪表盘</span></a>
+          <a class="menu-item" href="project-manage.html"><span class="icon">📁</span><span class="label">项目管理</span></a>
+          <a class="menu-item active" href="#"><span class="icon">🖥️</span><span class="label">服务器管理</span></a>
+          <a class="menu-item" href="git-credential.html"><span class="icon">🔑</span><span class="label">Git 认证</span></a>
+          <a class="menu-item" href="service-instance.html"><span class="icon">🔧</span><span class="label">服务管理</span></a>
+          <a class="menu-item" href="operation-log.html"><span class="icon">📜</span><span class="label">操作日志</span></a>
+          <a class="menu-item" href="schedule-task.html"><span class="icon">⏰</span><span class="label">定时任务</span></a>
+          <a class="menu-item" href="#"><span class="icon">⚙️</span><span class="label">系统设置</span></a>
+        </nav>
+      </aside>
+      <div class="main-content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <span class="collapse-btn" @click="sidebarCollapsed=!sidebarCollapsed">{{sidebarCollapsed?'☰':'✕'}}</span>
+            <div class="breadcrumb"><span>首页</span><span>/</span><span class="current">服务器管理</span></div>
+          </div>
+          <div class="topbar-right"><el-badge :value="3" :max="99"><span style="cursor:pointer;font-size:18px;color:var(--neutral-500)">🔔</span></el-badge><div class="avatar">管</div></div>
+        </header>
+        <main class="page-content" v-loading="loading">
+          <template v-if="!error && !emptyData">
+            <div class="page-header">
+              <div><h1>服务器管理</h1><p>管理所有服务器，按环境分组展示。添加服务器时自动探测环境信息。</p></div>
+              <el-button type="primary" @click="showAddDialog">➕ 添加服务器</el-button>
+            </div>
+
+            <!-- 开发环境 -->
+            <div class="env-group">
+              <div class="env-group-header"><span class="env-dot" style="background:var(--env-dev)"></span>开发环境 (dev)<span class="count">— 3 台</span></div>
+              <div class="server-cards">
+                <div class="server-card">
+                  <div class="server-card-header"><div><div class="server-name">dev-order-01</div><div class="server-ip">192.168.1.10</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>root@22</span></div>
+                    <div class="info-item">服务实例: <span>4</span></div>
+                    <div class="info-item">系统: <span>Ubuntu 22.04</span></div>
+                    <div class="info-item">CPU/内存: <span>4C / 8GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+                <div class="server-card">
+                  <div class="server-card-header"><div><div class="server-name">dev-user-01</div><div class="server-ip">192.168.1.11</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>root@22</span></div>
+                    <div class="info-item">服务实例: <span>3</span></div>
+                    <div class="info-item">系统: <span>CentOS 7.9</span></div>
+                    <div class="info-item">CPU/内存: <span>2C / 4GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+                <div class="server-card">
+                  <div class="server-card-header"><div><div class="server-name">dev-gateway-01</div><div class="server-ip">192.168.1.12</div></div><div class="status-badge"><span class="status-dot offline"></span>离线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>deploy@2222</span></div>
+                    <div class="info-item">服务实例: <span>0</span></div>
+                    <div class="info-item">系统: <span>Ubuntu 20.04</span></div>
+                    <div class="info-item">CPU/内存: <span>2C / 4GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="danger" size="small">删除</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 测试环境 -->
+            <div class="env-group">
+              <div class="env-group-header"><span class="env-dot" style="background:var(--env-test)"></span>测试环境 (test)<span class="count">— 2 台</span></div>
+              <div class="server-cards">
+                <div class="server-card">
+                  <div class="server-card-header"><div><div class="server-name">test-order-01</div><div class="server-ip">10.0.1.20</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>root@22</span></div>
+                    <div class="info-item">服务实例: <span>5</span></div>
+                    <div class="info-item">系统: <span>CentOS 7.9</span></div>
+                    <div class="info-item">CPU/内存: <span>4C / 16GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+                <div class="server-card">
+                  <div class="server-card-header"><div><div class="server-name">test-order-02</div><div class="server-ip">10.0.1.21</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>root@22</span></div>
+                    <div class="info-item">服务实例: <span>3</span></div>
+                    <div class="info-item">系统: <span>Ubuntu 22.04</span></div>
+                    <div class="info-item">CPU/内存: <span>4C / 16GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 生产环境（红色左边框标记） -->
+            <div class="env-group">
+              <div class="env-group-header"><span class="env-dot" style="background:var(--env-prod)"></span><span style="color:var(--error-500)">生产环境 (prod)</span><span class="count">— 3 台</span><el-tag size="small" type="danger" style="margin-left:auto">⚠️ 高风险</el-tag></div>
+              <div class="server-cards">
+                <div class="server-card prod-card">
+                  <div class="server-card-header"><div><div class="server-name">prod-order-01</div><div class="server-ip">172.16.0.10</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>deploy@22</span></div>
+                    <div class="info-item">服务实例: <span>6</span></div>
+                    <div class="info-item">系统: <span>CentOS 7.9</span></div>
+                    <div class="info-item">CPU/内存: <span>8C / 32GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+                <div class="server-card prod-card">
+                  <div class="server-card-header"><div><div class="server-name">prod-order-02</div><div class="server-ip">172.16.0.11</div></div><div class="status-badge"><span class="status-dot online"></span>在线</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>deploy@22</span></div>
+                    <div class="info-item">服务实例: <span>4</span></div>
+                    <div class="info-item">系统: <span>CentOS 7.9</span></div>
+                    <div class="info-item">CPU/内存: <span>8C / 32GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                    <el-button text type="primary" size="small">重新探测</el-button>
+                  </div>
+                </div>
+                <div class="server-card prod-card">
+                  <div class="server-card-header"><div><div class="server-name">prod-gateway-01</div><div class="server-ip">172.16.0.20</div></div><div class="status-badge"><span class="status-dot detecting"></span>探测中</div></div>
+                  <div class="server-card-info">
+                    <div class="info-item">SSH: <span>deploy@22</span></div>
+                    <div class="info-item">服务实例: <span>2</span></div>
+                    <div class="info-item">系统: <span>Ubuntu 22.04</span></div>
+                    <div class="info-item">CPU/内存: <span>8C / 16GB</span></div>
+                  </div>
+                  <div class="server-card-footer">
+                    <el-button text type="primary" size="small">查看详情</el-button>
+                    <el-button text type="primary" size="small">编辑</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 空数据 -->
+          <div v-if="emptyData" class="card"><div class="empty-state"><div class="empty-icon">🖥️</div><h4>暂无服务器</h4><p>还没有添加任何服务器，点击「添加服务器」开始</p><el-button type="primary" @click="showAddDialog">➕ 添加服务器</el-button></div></div>
+
+          <!-- 错误 -->
+          <div v-if="error" class="card"><el-alert title="加载服务器列表失败" type="error" :closable="false" show-icon style="margin-bottom:16px"><template #default>SSH 连接池异常，请检查网络。</template></el-alert><el-button type="primary" @click="error=false;loading=true;setTimeout(()=>{loading=false},800)">🔄 重新加载</el-button></div>
+
+          <!-- 添加服务器对话框 -->
+          <el-dialog v-model="dialogVisible" title="添加服务器" width="560px" destroy-on-close>
+            <el-form :model="form" label-width="100px" label-position="right">
+              <el-form-item label="主机名" required><el-input v-model="form.hostname" placeholder="如：prod-order-01" /></el-form-item>
+              <el-form-item label="IP 地址" required><el-input v-model="form.ip" placeholder="如：192.168.1.100" /></el-form-item>
+              <el-form-item label="SSH 端口"><el-input-number v-model="form.port" :min="1" :max="65535" style="width:100%" /></el-form-item>
+              <el-form-item label="用户名" required><el-input v-model="form.username" placeholder="SSH 登录用户名" /></el-form-item>
+              <el-form-item label="密码" required><el-input v-model="form.password" type="password" placeholder="SSH 登录密码（不入库）" show-password /></el-form-item>
+              <el-form-item label="环境类型" required>
+                <el-select v-model="form.envType" placeholder="选择环境" style="width:100%" @change="onEnvChange">
+                  <el-option label="🟢 开发环境 (dev)" value="dev" />
+                  <el-option label="🟡 测试环境 (test)" value="test" />
+                  <el-option label="🟣 预发环境 (staging)" value="staging" />
+                  <el-option label="🔴 生产环境 (prod)" value="prod" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="dialogVisible=false">取消</el-button>
+              <el-button type="primary" @click="submitForm" :loading="detecting">{{detecting?'正在连接并探测...':'连接并探测'}}</el-button>
+            </template>
+          </el-dialog>
+
+          <!-- 生产环境二次确认 -->
+          <el-dialog v-model="prodConfirmVisible" title="⚠️ 生产环境操作确认" width="480px" :close-on-click-modal="false">
+            <div style="text-align:center;margin-bottom:16px">
+              <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+              <h3 style="color:var(--error-600);margin-bottom:8px">您正在添加生产环境服务器</h3>
+              <p style="font-size:13px;color:var(--neutral-500)">生产环境操作具有高风险，请确认信息无误。</p>
+            </div>
+            <div style="background:var(--neutral-50);border-radius:8px;padding:16px;font-size:13px">
+              <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--neutral-500)">主机名:</span><span style="font-weight:500">{{form.hostname}}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--neutral-500)">IP 地址:</span><span style="font-weight:500">{{form.ip}}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--neutral-500)">环境:</span><span style="font-weight:500;color:var(--error-500)">🔴 生产（prod）</span></div>
+            </div>
+            <template #footer>
+              <el-button @click="prodConfirmVisible=false">取消</el-button>
+              <el-button type="danger" @click="prodConfirmVisible=false;dialogVisible=false;ElementPlus.ElMessage.success('生产服务器添加成功！')">⚠️ 我确认，继续添加</el-button>
+            </template>
+          </el-dialog>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const{createApp,ref,reactive}=Vue;
+    const app=createApp({setup(){
+      const sidebarCollapsed=ref(false),loading=ref(false),error=ref(false),emptyData=ref(false);
+      const dialogVisible=ref(false),prodConfirmVisible=ref(false),detecting=ref(false);
+      const form=reactive({hostname:'',ip:'',port:22,username:'',password:'',envType:'dev'});
+      function showAddDialog(){Object.assign(form,{hostname:'',ip:'',port:22,username:'',password:'',envType:'dev'});dialogVisible.value=true;}
+      function onEnvChange(){if(form.envType==='prod'){prodConfirmVisible.value=true;}}
+      function submitForm(){
+        if(form.envType==='prod'){prodConfirmVisible.value=true;return;}
+        detecting.value=true;setTimeout(()=>{detecting.value=false;dialogVisible.value=false;ElementPlus.ElMessage.success('服务器添加成功！');},2000);
+      }
+      return{sidebarCollapsed,loading,error,emptyData,dialogVisible,prodConfirmVisible,detecting,form,showAddDialog,onEnvChange,submitForm};
+    }});
+    app.use(ElementPlus);app.mount('#app');
+  </script>
+</body>
+</html>

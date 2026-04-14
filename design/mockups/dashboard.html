@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsPilot - 仪表盘</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue"></script>
+  <style>
+    /* ========== Design Tokens ========== */
+    :root {
+      --brand-50: #EEF2FF; --brand-100: #E0E7FF; --brand-500: #6366F1; --brand-600: #4F46E5; --brand-700: #4338CA;
+      --success-50: #ECFDF5; --success-500: #10B981; --success-600: #059669;
+      --warning-50: #FFFBEB; --warning-500: #F59E0B; --warning-600: #D97706;
+      --error-50: #FEF2F2; --error-500: #EF4444; --error-600: #DC2626;
+      --info-50: #EFF6FF; --info-500: #3B82F6;
+      --neutral-50: #F9FAFB; --neutral-100: #F3F4F6; --neutral-200: #E5E7EB;
+      --neutral-300: #D1D5DB; --neutral-400: #9CA3AF; --neutral-500: #6B7280;
+      --neutral-600: #4B5563; --neutral-700: #374151; --neutral-800: #1F2937; --neutral-900: #111827;
+      --env-dev: #3B82F6; --env-test: #F59E0B; --env-staging: #8B5CF6; --env-prod: #EF4444;
+      --sidebar-bg: #1E1E2D; --sidebar-hover: #2A2A3C; --sidebar-active: #6366F1;
+      --sidebar-text: #A2A3B7; --sidebar-text-active: #FFFFFF;
+      --text-xs: 12px; --text-sm: 13px; --text-base: 14px; --text-lg: 16px; --text-xl: 20px; --text-2xl: 24px;
+      --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
+      --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Inter, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--neutral-50); color: var(--neutral-700); font-size: var(--text-base); }
+
+    /* ========== Layout ========== */
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: var(--sidebar-bg); color: var(--sidebar-text); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; transition: width 0.3s ease; overflow: hidden; }
+    .sidebar.collapsed { width: 64px; }
+    .sidebar-logo { height: 56px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .sidebar-logo .logo-icon { font-size: 24px; margin-right: 12px; flex-shrink: 0; }
+    .sidebar-logo .logo-text { font-size: 18px; font-weight: 700; color: #fff; white-space: nowrap; }
+    .sidebar-menu { flex: 1; padding: 12px 8px; overflow-y: auto; }
+    .menu-item { display: flex; align-items: center; padding: 10px 16px; border-radius: 8px; margin-bottom: 4px; cursor: pointer; transition: all 0.15s; color: var(--sidebar-text); text-decoration: none; font-size: var(--text-base); }
+    .menu-item:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+    .menu-item.active { background: var(--sidebar-active); color: #fff; font-weight: 500; }
+    .menu-item .icon { width: 20px; height: 20px; margin-right: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .menu-item .label { white-space: nowrap; }
+    .sidebar.collapsed .label { display: none; }
+    .sidebar.collapsed .logo-text { display: none; }
+    .sidebar.collapsed .menu-item { justify-content: center; padding: 10px; }
+    .sidebar.collapsed .menu-item .icon { margin-right: 0; }
+
+    .main-content { flex: 1; margin-left: 240px; display: flex; flex-direction: column; transition: margin-left 0.3s ease; }
+    .sidebar.collapsed ~ .main-content { margin-left: 64px; }
+    .topbar { height: 56px; background: #fff; border-bottom: 1px solid var(--neutral-200); display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-6); position: sticky; top: 0; z-index: 50; }
+    .topbar-left { display: flex; align-items: center; gap: 16px; }
+    .topbar-left .collapse-btn { cursor: pointer; font-size: 20px; color: var(--neutral-500); }
+    .topbar-left .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--neutral-500); }
+    .topbar-left .breadcrumb .current { color: var(--neutral-800); font-weight: 500; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .topbar-right .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-500); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+    .page-content { flex: 1; padding: var(--space-6); max-width: 1400px; width: 100%; }
+
+    /* ========== Dashboard ========== */
+    .page-header { margin-bottom: var(--space-6); }
+    .page-header h1 { font-size: var(--text-xl); font-weight: 600; color: var(--neutral-900); margin-bottom: 4px; }
+    .page-header p { font-size: var(--text-sm); color: var(--neutral-500); }
+
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-6); }
+    .stat-card { background: #fff; border-radius: var(--radius-md); padding: var(--space-6); border: 1px solid var(--neutral-200); box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: flex-start; transition: box-shadow 0.15s; }
+    .stat-card:hover { box-shadow: var(--shadow-md); }
+    .stat-card .stat-info .stat-label { font-size: var(--text-sm); color: var(--neutral-500); margin-bottom: 8px; }
+    .stat-card .stat-info .stat-value { font-size: var(--text-2xl); font-weight: 700; color: var(--neutral-900); }
+    .stat-card .stat-info .stat-change { font-size: var(--text-xs); margin-top: 4px; }
+    .stat-card .stat-info .stat-change.up { color: var(--success-500); }
+    .stat-card .stat-info .stat-change.down { color: var(--error-500); }
+    .stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .stat-icon.blue { background: var(--brand-50); }
+    .stat-icon.green { background: var(--success-50); }
+    .stat-icon.orange { background: var(--warning-50); }
+    .stat-icon.red { background: var(--error-50); }
+
+    .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-6); }
+    .card { background: #fff; border-radius: var(--radius-md); border: 1px solid var(--neutral-200); box-shadow: var(--shadow-sm); }
+    .card-header { padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--neutral-200); display: flex; justify-content: space-between; align-items: center; }
+    .card-header h3 { font-size: var(--text-lg); font-weight: 600; color: var(--neutral-800); }
+    .card-body { padding: var(--space-6); }
+
+    .env-distribution { display: flex; gap: var(--space-4); }
+    .env-item { flex: 1; text-align: center; padding: var(--space-4); border-radius: var(--radius-md); }
+    .env-item .env-count { font-size: var(--text-2xl); font-weight: 700; margin-bottom: 4px; }
+    .env-item .env-label { font-size: var(--text-sm); color: var(--neutral-500); }
+    .env-item.dev { background: var(--info-50); }
+    .env-item.dev .env-count { color: var(--env-dev); }
+    .env-item.test { background: var(--warning-50); }
+    .env-item.test .env-count { color: var(--env-test); }
+    .env-item.staging { background: #F5F3FF; }
+    .env-item.staging .env-count { color: var(--env-staging); }
+    .env-item.prod { background: var(--error-50); }
+    .env-item.prod .env-count { color: var(--env-prod); }
+
+    .service-health-list { display: flex; flex-direction: column; gap: 8px; }
+    .service-health-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--neutral-100); }
+    .service-health-item:last-child { border-bottom: none; }
+    .service-health-item .svc-name { font-size: var(--text-sm); font-weight: 500; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .status-dot.running { background: var(--success-500); }
+    .status-dot.stopped { background: var(--neutral-400); }
+    .status-dot.deploying { background: var(--info-500); animation: pulse 1.5s ease-in-out infinite; }
+    .status-dot.error { background: var(--error-500); }
+    @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }
+
+    .recent-ops { width: 100%; }
+    .recent-ops .op-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--neutral-100); gap: 12px; }
+    .recent-ops .op-item:last-child { border-bottom: none; }
+    .recent-ops .op-item .op-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .recent-ops .op-item .op-info { flex: 1; min-width: 0; }
+    .recent-ops .op-item .op-info .op-title { font-size: var(--text-sm); font-weight: 500; color: var(--neutral-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .recent-ops .op-item .op-info .op-desc { font-size: var(--text-xs); color: var(--neutral-500); }
+    .recent-ops .op-item .op-time { font-size: var(--text-xs); color: var(--neutral-400); white-space: nowrap; }
+
+    .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+    .quick-action { display: flex; flex-direction: column; align-items: center; padding: var(--space-6); border-radius: var(--radius-md); border: 1px dashed var(--neutral-300); cursor: pointer; transition: all 0.15s; text-decoration: none; }
+    .quick-action:hover { border-color: var(--brand-500); background: var(--brand-50); }
+    .quick-action .qa-icon { font-size: 28px; margin-bottom: 8px; }
+    .quick-action .qa-label { font-size: var(--text-sm); color: var(--neutral-700); font-weight: 500; }
+
+    /* ========== Responsive ========== */
+    @media (max-width: 1440px) {
+      .page-content { max-width: 1200px; }
+    }
+    @media (max-width: 768px) {
+      .sidebar { width: 64px; }
+      .sidebar .label, .sidebar .logo-text { display: none; }
+      .sidebar .menu-item { justify-content: center; padding: 10px; }
+      .sidebar .menu-item .icon { margin-right: 0; }
+      .main-content { margin-left: 64px !important; }
+      .page-content { padding: var(--space-4); }
+      .stat-cards { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .quick-actions { grid-template-columns: repeat(2, 1fr); }
+      .env-distribution { flex-wrap: wrap; }
+      .env-item { min-width: calc(50% - 8px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="layout">
+      <!-- 侧边栏 -->
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-logo">
+          <span class="logo-icon">🚀</span>
+          <span class="logo-text">OpsPilot</span>
+        </div>
+        <nav class="sidebar-menu">
+          <a class="menu-item active" href="dashboard.html"><span class="icon">🏠</span><span class="label">仪表盘</span></a>
+          <a class="menu-item" href="project-manage.html"><span class="icon">📁</span><span class="label">项目管理</span></a>
+          <a class="menu-item" href="server-manage.html"><span class="icon">🖥️</span><span class="label">服务器管理</span></a>
+          <a class="menu-item" href="git-credential.html"><span class="icon">🔑</span><span class="label">Git 认证</span></a>
+          <a class="menu-item" href="service-instance.html"><span class="icon">🔧</span><span class="label">服务管理</span></a>
+          <a class="menu-item" href="operation-log.html"><span class="icon">📜</span><span class="label">操作日志</span></a>
+          <a class="menu-item" href="schedule-task.html"><span class="icon">⏰</span><span class="label">定时任务</span></a>
+          <a class="menu-item" href="#"><span class="icon">⚙️</span><span class="label">系统设置</span></a>
+        </nav>
+      </aside>
+
+      <!-- 主内容区 -->
+      <div class="main-content">
+        <!-- 顶部栏 -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <span class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">{{ sidebarCollapsed ? '☰' : '✕' }}</span>
+            <div class="breadcrumb">
+              <span>首页</span><span>/</span><span class="current">仪表盘</span>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <el-badge :value="3" :max="99">
+              <span style="cursor:pointer;font-size:18px;color:var(--neutral-500)">🔔</span>
+            </el-badge>
+            <div class="avatar" title="管理员">管</div>
+          </div>
+        </header>
+
+        <!-- 页面内容 -->
+        <main class="page-content" v-loading="loading">
+          <!-- 正常状态 -->
+          <template v-if="!error">
+            <div class="page-header">
+              <h1>仪表盘</h1>
+              <p>欢迎回来，管理员！以下是系统运行概览。</p>
+            </div>
+
+            <!-- 统计卡片 -->
+            <div class="stat-cards">
+              <div class="stat-card">
+                <div class="stat-info">
+                  <div class="stat-label">项目总数</div>
+                  <div class="stat-value">12</div>
+                  <div class="stat-change up">↑ 2 本月新增</div>
+                </div>
+                <div class="stat-icon blue">📁</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-info">
+                  <div class="stat-label">服务器</div>
+                  <div class="stat-value">9</div>
+                  <div class="stat-change">8 在线 / 1 离线</div>
+                </div>
+                <div class="stat-icon green">🖥️</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-info">
+                  <div class="stat-label">服务实例</div>
+                  <div class="stat-value">24</div>
+                  <div class="stat-change up">↑ 3 运行中</div>
+                </div>
+                <div class="stat-icon orange">🔧</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-info">
+                  <div class="stat-label">今日部署</div>
+                  <div class="stat-value">7</div>
+                  <div class="stat-change up">6 成功 / 1 失败</div>
+                </div>
+                <div class="stat-icon red">🚀</div>
+              </div>
+            </div>
+
+            <!-- 环境分布 + 服务健康 -->
+            <div class="dashboard-grid">
+              <div class="card">
+                <div class="card-header"><h3>环境分布</h3></div>
+                <div class="card-body">
+                  <div class="env-distribution">
+                    <div class="env-item dev">
+                      <div class="env-count">3</div>
+                      <div class="env-label">🟢 开发环境</div>
+                    </div>
+                    <div class="env-item test">
+                      <div class="env-count">2</div>
+                      <div class="env-label">🟡 测试环境</div>
+                    </div>
+                    <div class="env-item staging">
+                      <div class="env-count">1</div>
+                      <div class="env-label">🟣 预发环境</div>
+                    </div>
+                    <div class="env-item prod">
+                      <div class="env-count">3</div>
+                      <div class="env-label">🔴 生产环境</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3>服务健康</h3></div>
+                <div class="card-body">
+                  <div class="service-health-list">
+                    <div class="service-health-item"><span><span class="status-dot running"></span><span class="svc-name">order-service-prod</span></span><el-tag size="small" type="success">运行中</el-tag></div>
+                    <div class="service-health-item"><span><span class="status-dot running"></span><span class="svc-name">user-service-prod</span></span><el-tag size="small" type="success">运行中</el-tag></div>
+                    <div class="service-health-item"><span><span class="status-dot running"></span><span class="svc-name">gateway-prod</span></span><el-tag size="small" type="success">运行中</el-tag></div>
+                    <div class="service-health-item"><span><span class="status-dot stopped"></span><span class="svc-name">payment-service-test</span></span><el-tag size="small" type="info">已停止</el-tag></div>
+                    <div class="service-health-item"><span><span class="status-dot deploying"></span><span class="svc-name">notify-service-dev</span></span><el-tag size="small" type="warning">部署中</el-tag></div>
+                    <div class="service-health-item"><span><span class="status-dot error"></span><span class="svc-name">report-service-staging</span></span><el-tag size="small" type="danger">异常</el-tag></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 最近操作 -->
+            <div class="card" style="margin-bottom: var(--space-6);">
+              <div class="card-header"><h3>最近操作</h3><el-button text type="primary" size="small">查看全部 →</el-button></div>
+              <div class="card-body">
+                <div class="recent-ops">
+                  <div class="op-item">
+                    <div class="op-icon" style="background:var(--success-50);color:var(--success-500)">✅</div>
+                    <div class="op-info"><div class="op-title">order-service-prod 发版成功</div><div class="op-desc">操作人: 小李 · 版本: 20260412_003_v1.2.0 · 耗时: 3m 25s</div></div>
+                    <div class="op-time">10 分钟前</div>
+                  </div>
+                  <div class="op-item">
+                    <div class="op-icon" style="background:var(--error-50);color:var(--error-500)">❌</div>
+                    <div class="op-info"><div class="op-title">report-service-staging 发版失败</div><div class="op-desc">操作人: 小王 · 失败步骤: 编译构建 · mvn build failed</div></div>
+                    <div class="op-time">25 分钟前</div>
+                  </div>
+                  <div class="op-item">
+                    <div class="op-icon" style="background:var(--brand-50);color:var(--brand-500)">🔄</div>
+                    <div class="op-info"><div class="op-title">user-service-prod 重启</div><div class="op-desc">操作人: 管理员 · 耗时: 12s</div></div>
+                    <div class="op-time">1 小时前</div>
+                  </div>
+                  <div class="op-item">
+                    <div class="op-icon" style="background:var(--warning-50);color:var(--warning-500)">⏪</div>
+                    <div class="op-info"><div class="op-title">gateway-prod 版本回退</div><div class="op-desc">操作人: 小李 · 回退至: 20260411_002_v1.1.8</div></div>
+                    <div class="op-time">2 小时前</div>
+                  </div>
+                  <div class="op-item">
+                    <div class="op-icon" style="background:var(--success-50);color:var(--success-500)">✅</div>
+                    <div class="op-info"><div class="op-title">notify-service-dev 发版成功</div><div class="op-desc">操作人: 小张 · 版本: 20260412_001_v0.9.5 · 耗时: 2m 10s</div></div>
+                    <div class="op-time">3 小时前</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 快捷入口 -->
+            <div class="card">
+              <div class="card-header"><h3>快捷入口</h3></div>
+              <div class="card-body">
+                <div class="quick-actions">
+                  <a class="quick-action" href="service-instance.html"><span class="qa-icon">🚀</span><span class="qa-label">发版部署</span></a>
+                  <a class="quick-action" href="server-manage.html"><span class="qa-icon">🖥️</span><span class="qa-label">添加服务器</span></a>
+                  <a class="quick-action" href="schedule-task.html"><span class="qa-icon">⏰</span><span class="qa-label">定时任务</span></a>
+                  <a class="quick-action" href="operation-log.html"><span class="qa-icon">📜</span><span class="qa-label">操作日志</span></a>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 错误状态 -->
+          <el-alert v-else title="加载仪表盘数据失败" type="error" :closable="false" show-icon style="margin-bottom:16px;">
+            <template #default>网络连接超时，请检查网络后重试。</template>
+          </el-alert>
+          <el-button v-if="error" type="primary" @click="error = false; loading = true; setTimeout(()=>{loading=false}, 800)">🔄 重新加载</el-button>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue;
+    const app = createApp({
+      setup() {
+        const sidebarCollapsed = ref(false);
+        const loading = ref(false);
+        const error = ref(false);
+        return { sidebarCollapsed, loading, error };
+      }
+    });
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>

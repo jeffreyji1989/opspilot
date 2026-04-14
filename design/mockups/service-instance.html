@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsPilot - 服务管理</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue"></script>
+  <style>
+    :root{--brand-50:#EEF2FF;--brand-500:#6366F1;--brand-600:#4F46E5;--success-50:#ECFDF5;--success-500:#10B981;--warning-50:#FFFBEB;--warning-500:#F59E0B;--error-50:#FEF2F2;--error-500:#EF4444;--info-50:#EFF6FF;--info-500:#3B82F6;--neutral-50:#F9FAFB;--neutral-100:#F3F4F6;--neutral-200:#E5E7EB;--neutral-300:#D1D5DB;--neutral-400:#9CA3AF;--neutral-500:#6B7280;--neutral-600:#4B5563;--neutral-700:#374151;--neutral-800:#1F2937;--neutral-900:#111827;--env-dev:#3B82F6;--env-test:#F59E0B;--env-staging:#8B5CF6;--env-prod:#EF4444;--sidebar-bg:#1E1E2D;--sidebar-hover:#2A2A3C;--sidebar-active:#6366F1;--sidebar-text:#A2A3B7;--sidebar-text-active:#FFFFFF;--radius-sm:4px;--radius-md:8px;--shadow-sm:0 1px 2px rgba(0,0,0,0.05)}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Inter,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--neutral-50);color:var(--neutral-700);font-size:14px}
+    .layout{display:flex;min-height:100vh}
+    .sidebar{width:240px;background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow:hidden}
+    .sidebar.collapsed{width:64px}
+    .sidebar-logo{height:56px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-logo .logo-icon{font-size:24px;margin-right:12px}.sidebar-logo .logo-text{font-size:18px;font-weight:700;color:#fff;white-space:nowrap}
+    .sidebar-menu{flex:1;padding:12px 8px;overflow-y:auto}
+    .menu-item{display:flex;align-items:center;padding:10px 16px;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:all .15s;color:var(--sidebar-text);text-decoration:none}
+    .menu-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
+    .menu-item.active{background:var(--sidebar-active);color:#fff;font-weight:500}
+    .menu-item .icon{width:20px;margin-right:12px;font-size:16px;flex-shrink:0;text-align:center}
+    .sidebar.collapsed .label,.sidebar.collapsed .logo-text{display:none}
+    .sidebar.collapsed .menu-item{justify-content:center;padding:10px}.sidebar.collapsed .menu-item .icon{margin-right:0}
+    .main-content{flex:1;margin-left:240px;display:flex;flex-direction:column;transition:margin-left .3s}
+    .sidebar.collapsed~.main-content{margin-left:64px}
+    .topbar{height:56px;background:#fff;border-bottom:1px solid var(--neutral-200);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+    .topbar-left{display:flex;align-items:center;gap:16px}
+    .collapse-btn{cursor:pointer;font-size:20px;color:var(--neutral-500)}
+    .breadcrumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--neutral-500)}
+    .breadcrumb .current{color:var(--neutral-800);font-weight:500}
+    .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-500);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;cursor:pointer}
+    .page-content{flex:1;padding:24px;max-width:1400px;width:100%}
+    .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .page-header h1{font-size:20px;font-weight:600;color:var(--neutral-900)}
+    .page-header p{font-size:13px;color:var(--neutral-500);margin-top:4px}
+    .search-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+    .search-bar .el-input{width:200px}
+    .search-bar .el-select{width:140px}
+    .card{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);box-shadow:var(--shadow-sm)}
+    .card-header{padding:16px 24px;border-bottom:1px solid var(--neutral-200);display:flex;justify-content:space-between;align-items:center}
+    .card-header h3{font-size:16px;font-weight:600;color:var(--neutral-800)}
+    .card-body{padding:24px}
+    .pagination-wrapper{display:flex;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--neutral-200)}
+
+    /* 服务详情 */
+    .service-detail-header{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);padding:24px;margin-bottom:16px}
+    .svc-title-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+    .svc-title{font-size:20px;font-weight:700;color:var(--neutral-900)}
+    .svc-subtitle{font-size:13px;color:var(--neutral-500);margin-top:4px}
+    .svc-meta{display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap}
+    .svc-meta-item{display:flex;align-items:center;gap:6px;font-size:13px}
+    .svc-meta-item .label{color:var(--neutral-500)}
+    .svc-meta-item .value{font-weight:500;color:var(--neutral-800)}
+    .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .status-dot.running{background:var(--success-500)}
+    .status-dot.stopped{background:var(--neutral-400)}
+    .status-dot.deploying{background:var(--info-500);animation:pulse 1.5s ease-in-out infinite}
+    .status-dot.error{background:var(--error-500)}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+    .svc-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .svc-actions .el-button{border-radius:6px}
+
+    .empty-state{text-align:center;padding:60px 20px}
+    .empty-state .empty-icon{font-size:64px;margin-bottom:16px}
+    .empty-state h4{font-size:16px;color:var(--neutral-700);margin-bottom:8px}
+    .empty-state p{font-size:13px;color:var(--neutral-500);margin-bottom:24px}
+
+    /* Tab 内容 */
+    .tab-content{background:#fff;border-radius:0 0 8px 8px;border:1px solid var(--neutral-200);border-top:none;padding:24px;min-height:400px}
+    .log-viewer{background:#1E1E2D;color:#D4D4D4;font-family:'Cascadia Code','Fira Code',monospace;font-size:13px;padding:16px;border-radius:8px;max-height:500px;overflow-y:auto;line-height:1.6}
+    .log-viewer .log-line{white-space:pre-wrap;word-break:break-all}
+    .log-viewer .log-line.error{color:#F87171}
+    .log-viewer .log-line.warn{color:#FBBF24}
+    .log-viewer .log-line.info{color:#60A5FA}
+    .log-toolbar{display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+    .log-toolbar .el-input{width:240px}
+
+    .monitor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+    .monitor-card{background:var(--neutral-50);border-radius:8px;padding:16px;text-align:center}
+    .monitor-card .mc-label{font-size:12px;color:var(--neutral-500);margin-bottom:8px}
+    .monitor-card .mc-value{font-size:24px;font-weight:700;color:var(--neutral-800)}
+    .monitor-card .mc-unit{font-size:12px;color:var(--neutral-500)}
+
+    .back-btn{display:inline-flex;align-items:center;gap:6px;color:var(--neutral-500);font-size:13px;cursor:pointer;margin-bottom:16px}
+    .back-btn:hover{color:var(--brand-500)}
+
+    @media(max-width:1440px){.page-content{max-width:1200px}}
+    @media(max-width:768px){.sidebar{width:64px}.sidebar .label,.sidebar .logo-text{display:none}.sidebar .menu-item{justify-content:center;padding:10px}.sidebar .menu-item .icon{margin-right:0}.main-content{margin-left:64px!important}.page-content{padding:16px}.search-bar{flex-direction:column}.search-bar .el-input,.search-bar .el-select{width:100%}.page-header{flex-direction:column;gap:12px;align-items:flex-start}.svc-meta{flex-direction:column;gap:8px}.monitor-grid{grid-template-columns:1fr 1fr}.svc-actions{flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="layout">
+      <aside class="sidebar" :class="{collapsed:sidebarCollapsed}">
+        <div class="sidebar-logo"><span class="logo-icon">🚀</span><span class="logo-text">OpsPilot</span></div>
+        <nav class="sidebar-menu">
+          <a class="menu-item" href="dashboard.html"><span class="icon">🏠</span><span class="label">仪表盘</span></a>
+          <a class="menu-item" href="project-manage.html"><span class="icon">📁</span><span class="label">项目管理</span></a>
+          <a class="menu-item" href="server-manage.html"><span class="icon">🖥️</span><span class="label">服务器管理</span></a>
+          <a class="menu-item" href="git-credential.html"><span class="icon">🔑</span><span class="label">Git 认证</span></a>
+          <a class="menu-item active" href="#"><span class="icon">🔧</span><span class="label">服务管理</span></a>
+          <a class="menu-item" href="operation-log.html"><span class="icon">📜</span><span class="label">操作日志</span></a>
+          <a class="menu-item" href="schedule-task.html"><span class="icon">⏰</span><span class="label">定时任务</span></a>
+          <a class="menu-item" href="#"><span class="icon">⚙️</span><span class="label">系统设置</span></a>
+        </nav>
+      </aside>
+      <div class="main-content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <span class="collapse-btn" @click="sidebarCollapsed=!sidebarCollapsed">{{sidebarCollapsed?'☰':'✕'}}</span>
+            <div class="breadcrumb"><span>首页</span><span>/</span><span class="current">服务管理</span></div>
+          </div>
+          <div class="topbar-right"><el-badge :value="3" :max="99"><span style="cursor:pointer;font-size:18px;color:var(--neutral-500)">🔔</span></el-badge><div class="avatar">管</div></div>
+        </header>
+        <main class="page-content" v-loading="loading">
+          <!-- 服务列表视图 -->
+          <template v-if="!showDetail && !error && !emptyData">
+            <div class="page-header">
+              <div><h1>服务管理</h1><p>管理服务实例，执行发版、重启、回退等运维操作。</p></div>
+              <el-button type="primary" @click="showCreateDialog">➕ 创建服务</el-button>
+            </div>
+            <div class="search-bar">
+              <el-select v-model="filterProject" placeholder="项目筛选" clearable>
+                <el-option label="订单系统" value="order" />
+                <el-option label="用户中心" value="user" />
+              </el-select>
+              <el-select v-model="filterEnv" placeholder="环境筛选" clearable>
+                <el-option label="开发" value="dev" /><el-option label="测试" value="test" /><el-option label="预发" value="staging" /><el-option label="生产" value="prod" />
+              </el-select>
+              <el-select v-model="filterStatus" placeholder="状态筛选" clearable>
+                <el-option label="运行中" value="running" /><el-option label="已停止" value="stopped" /><el-option label="部署中" value="deploying" /><el-option label="异常" value="error" />
+              </el-select>
+              <el-button type="primary" @click="handleFilter">搜索</el-button>
+              <el-button @click="resetFilter">重置</el-button>
+            </div>
+            <div class="card">
+              <el-table :data="serviceData" stripe border style="width:100%">
+                <el-table-column prop="name" label="服务名称" min-width="180">
+                  <template #default="{row}"><span style="font-weight:500;color:var(--neutral-800);cursor:pointer" @click="showServiceDetail(row)">{{row.name}}</span></template>
+                </el-table-column>
+                <el-table-column prop="project" label="所属项目" width="120" />
+                <el-table-column prop="module" label="关联模块" width="140" />
+                <el-table-column prop="server" label="目标服务器" width="140" />
+                <el-table-column prop="env" label="环境" width="90">
+                  <template #default="{row}"><el-tag :type="row.env==='prod'?'danger':row.env==='staging'?'':'row.env==='test'?'warning':''" size="small">{{row.env}}</el-tag></template>
+                </el-table-column>
+                <el-table-column prop="port" label="端口" width="80" align="center" />
+                <el-table-column prop="status" label="状态" width="100">
+                  <template #default="{row}">
+                    <span><span class="status-dot" :class="row.status"></span>
+                    <el-tag :type="row.status==='running'?'success':row.status==='stopped'?'info':row.status==='deploying'?'warning':'danger'" size="small">{{statusLabel(row.status)}}</el-tag></span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="version" label="当前版本" width="180" />
+                <el-table-column label="操作" width="240" fixed="right">
+                  <template #default="{row}">
+                    <el-button text type="primary" size="small" @click="showServiceDetail(row)">📋 详情</el-button>
+                    <el-button text type="success" size="small" @click="deployService(row)">🚀 发版</el-button>
+                    <el-button text type="warning" size="small" @click="restartService(row)">🔄 重启</el-button>
+                    <el-popconfirm title="确认删除此服务？" @confirm="deleteService(row)">
+                      <template #reference><el-button text type="danger" size="small">🗑️ 删除</el-button></template>
+                    </el-popconfirm>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="pagination-wrapper">
+                <el-pagination background layout="total, sizes, prev, pager, next" :total="60" :page-size="10" />
+              </div>
+            </div>
+          </template>
+
+          <!-- 空数据 -->
+          <div v-if="emptyData && !showDetail" class="card"><div class="empty-state"><div class="empty-icon">🔧</div><h4>暂无服务实例</h4><p>还没有创建任何服务，点击「创建服务」开始部署你的第一个服务</p><el-button type="primary" @click="showCreateDialog">➕ 创建服务</el-button></div></div>
+
+          <!-- 错误 -->
+          <div v-if="error && !showDetail" class="card"><el-alert title="加载服务列表失败" type="error" :closable="false" show-icon style="margin-bottom:16px"><template #default>服务发现异常，请检查网络连接。</template></el-alert><el-button type="primary" @click="error=false;loading=true;setTimeout(()=>{loading=false},800)">🔄 重新加载</el-button></div>
+
+          <!-- 服务详情视图 -->
+          <template v-if="showDetail">
+            <div class="back-btn" @click="showDetail=false">← 返回服务列表</div>
+            <div class="service-detail-header">
+              <div class="svc-title-row">
+                <div><div class="svc-title">🔧 order-service-prod</div><div class="svc-subtitle">所属: 订单系统 / order-service</div></div>
+                <div class="svc-actions">
+                  <el-button type="primary" size="small" @click="showDeployWizard">🚀 发版</el-button>
+                  <el-button type="warning" size="small" @click="restartService">🔄 重启</el-button>
+                  <el-button type="info" size="small">⏪ 回退</el-button>
+                  <el-button size="small">⚙️ 配置</el-button>
+                  <el-button size="small">⏰ 定时</el-button>
+                  <el-button type="danger" size="plain">🗑️ 删除</el-button>
+                </div>
+              </div>
+              <div class="svc-meta">
+                <div class="svc-meta-item"><span class="status-dot running"></span><span class="value" style="color:var(--success-500)">运行中</span></div>
+                <div class="svc-meta-item"><span class="label">环境:</span><span class="value"><el-tag size="small" type="danger">prod</el-tag></span></div>
+                <div class="svc-meta-item"><span class="label">服务器:</span><span class="value">172.16.0.10</span></div>
+                <div class="svc-meta-item"><span class="label">端口:</span><span class="value">8080</span></div>
+                <div class="svc-meta-item"><span class="label">当前版本:</span><span class="value">20260412_002_v1.0.1</span></div>
+              </div>
+            </div>
+
+            <el-tabs v-model="activeTab" type="card">
+              <el-tab-pane label="📜 发版记录" name="deploy">
+                <div class="tab-content">
+                  <el-table :data="deployRecords" stripe border style="width:100%">
+                    <el-table-column prop="version" label="版本号" width="200" />
+                    <el-table-column prop="branch" label="分支/Tag" width="120" />
+                    <el-table-column prop="commit" label="Commit" width="100"><template #default="{row}"><code style="font-size:12px">{{row.commit}}</code></template></el-table-column>
+                    <el-table-column prop="operator" label="操作人" width="80" />
+                    <el-table-column prop="startTime" label="开始时间" width="170" />
+                    <el-table-column prop="duration" label="耗时" width="80" />
+                    <el-table-column prop="status" label="状态" width="100">
+                      <template #default="{row}"><el-tag :type="row.status==='success'?'success':row.status==='failed'?'danger':'info'" size="small">{{row.status==='success'?'成功':row.status==='failed'?'失败':'回退'}}</el-tag></template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="140">
+                      <template #default><el-button text type="primary" size="small">📋 详情</el-button><el-button text type="warning" size="small">⏪ 回退</el-button></template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="📋 实时日志" name="log">
+                <div class="tab-content">
+                  <div class="log-toolbar">
+                    <el-radio-group v-model="logLevel" size="small">
+                      <el-radio-button label="all">全部</el-radio-button>
+                      <el-radio-button label="error">ERROR</el-radio-button>
+                      <el-radio-button label="warn">WARN</el-radio-button>
+                      <el-radio-button label="info">INFO</el-radio-button>
+                    </el-radio-group>
+                    <el-input v-model="logSearch" placeholder="搜索关键字" clearable size="small" style="width:200px" />
+                    <el-button size="small" @click="logSearch=''">🔍</el-button>
+                    <el-switch v-model="autoScroll" active-text="自动滚动" size="small" style="margin-left:8px" />
+                    <el-button size="small" type="danger" plain @click="logLines=[]">清空</el-button>
+                    <el-button size="small">📥 下载日志</el-button>
+                  </div>
+                  <div class="log-viewer" ref="logViewer">
+                    <div class="log-line info">2026-04-12 10:00:01.234 [INFO ] [main] c.o.OrderApplication - Starting application using Java 17.0.9</div>
+                    <div class="log-line info">2026-04-12 10:00:02.456 [INFO ] [main] o.s.b.w.e.t.TomcatWebServer - Tomcat initialized with port(s): 8080 (http)</div>
+                    <div class="log-line info">2026-04-12 10:00:03.789 [INFO ] [main] c.o.OrderApplication - Started OrderApplication in 2.553 seconds</div>
+                    <div class="log-line error">2026-04-12 10:00:05.012 [ERROR] [http-nio-8080-exec-1] c.o.c.OrderController - java.lang.NullPointerException: Cannot invoke method on null object</div>
+                    <div class="log-line error">    at com.opspilot.controller.OrderController.get(OrderController.java:42)</div>
+                    <div class="log-line error">    at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:897)</div>
+                    <div class="log-line warn">2026-04-12 10:00:06.345 [WARN ] [http-nio-8080-exec-2] c.o.f.RateLimitFilter - Rate limit exceeded for IP 192.168.1.100</div>
+                    <div class="log-line info">2026-04-12 10:00:07.678 [INFO ] [scheduler-1] c.o.s.OrderSyncTask - Order sync completed, processed 150 records</div>
+                    <div class="log-line info">2026-04-12 10:00:08.901 [INFO ] [http-nio-8080-exec-3] c.o.c.OrderController - GET /api/orders/12345 - 200 OK (45ms)</div>
+                    <div class="log-line info">2026-04-12 10:00:09.123 [INFO ] [http-nio-8080-exec-4] c.o.c.OrderController - POST /api/orders - 201 Created (120ms)</div>
+                  </div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="⚙️ 配置管理" name="config">
+                <div class="tab-content">
+                  <el-descriptions title="服务配置" :column="2" border>
+                    <el-descriptions-item label="部署路径">/opt/apps/order-service</el-descriptions-item>
+                    <el-descriptions-item label="JVM 参数">-Xms512m -Xmx1024m -XX:+UseG1GC</el-descriptions-item>
+                    <el-descriptions-item label="健康检查">/actuator/health :8080</el-descriptions-item>
+                    <el-descriptions-item label="启动等待">30 秒</el-descriptions-item>
+                  </el-descriptions>
+                  <h4 style="margin:24px 0 12px;font-size:15px">环境变量</h4>
+                  <el-table :data="envVars" border style="width:100%;margin-bottom:16px">
+                    <el-table-column prop="key" label="Key" /><el-table-column prop="value" label="Value" />
+                    <el-table-column label="操作" width="100"><template #default><el-button text type="primary" size="small">编辑</el-button></template></el-table-column>
+                  </el-table>
+                  <el-button type="primary" size="small">➕ 添加环境变量</el-button>
+                  <el-button type="success" size="small" style="margin-left:8px">💾 保存（下次重启生效）</el-button>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="📊 服务监控" name="monitor">
+                <div class="tab-content">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+                    <span style="font-size:13px;color:var(--neutral-500)">最后更新: 2026-04-12 10:05:00</span>
+                    <el-button size="small" type="primary">🔄 刷新</el-button>
+                  </div>
+                  <div class="monitor-grid">
+                    <div class="monitor-card"><div class="mc-label">进程状态</div><div class="mc-value" style="color:var(--success-500)">运行中</div><div class="mc-unit">PID: 12345</div></div>
+                    <div class="monitor-card"><div class="mc-label">CPU 使用率</div><div class="mc-value">12.5</div><div class="mc-unit">%</div></div>
+                    <div class="monitor-card"><div class="mc-label">内存使用</div><div class="mc-value">512</div><div class="mc-unit">MB / 1024 MB</div></div>
+                    <div class="monitor-card"><div class="mc-label">响应时间</div><div class="mc-value">45</div><div class="mc-unit">ms</div></div>
+                    <div class="monitor-card"><div class="mc-label">运行时长</div><div class="mc-value">3d 14h</div><div class="mc-unit">自上次启动</div></div>
+                    <div class="monitor-card"><div class="mc-label">日志大小</div><div class="mc-value">1.2</div><div class="mc-unit">GB</div></div>
+                  </div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="⏰ 定时发版" name="schedule">
+                <div class="tab-content">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+                    <span style="font-size:13px;color:var(--neutral-500)">该服务的定时发版任务列表</span>
+                    <el-button type="primary" size="small">➕ 创建定时任务</el-button>
+                  </div>
+                  <el-table :data="scheduleData" stripe border style="width:100%">
+                    <el-table-column prop="name" label="任务名称" min-width="160" />
+                    <el-table-column prop="trigger" label="触发方式" width="100"><template #default="{row}"><el-tag size="small">{{row.trigger}}</el-tag></template></el-table-column>
+                    <el-table-column prop="time" label="执行时间" width="160" />
+                    <el-table-column prop="branch" label="目标分支" width="120" />
+                    <el-table-column prop="rollback" label="失败回退" width="100"><template #default="{row}">{{row.rollback?'是':'否'}}</template></el-table-column>
+                    <el-table-column prop="dingtalk" label="钉钉通知" width="90"><template #default="{row}">{{row.dingtalk?'✅':'❌'}}</template></el-table-column>
+                    <el-table-column prop="status" label="状态" width="100"><template #default="{row}"><el-tag :type="row.status==='running'?'success':'info'" size="small">{{row.status==='running'?'运行中':'暂停'}}</el-tag></template></el-table-column>
+                    <el-table-column label="操作" width="180"><template #default><el-button text type="primary" size="small">编辑</el-button><el-button text type="success" size="small">▶ 执行</el-button><el-button text type="danger" size="small">删除</el-button></template></el-table-column>
+                  </el-table>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </template>
+
+          <!-- 发版部署向导对话框 -->
+          <el-dialog v-model="deployWizardVisible" title="🚀 发版部署" width="680px" destroy-on-close :close-on-click-modal="false">
+            <el-steps :active="deployStep" finish-status="success" style="margin-bottom:24px">
+              <el-step title="选择版本" /><el-step title="确认信息" /><el-step title="执行部署" /><el-step title="部署结果" />
+            </el-steps>
+
+            <!-- Step 1: 选择版本 -->
+            <div v-if="deployStep===0">
+              <el-form label-width="100px" label-position="right">
+                <el-form-item label="选择方式">
+                  <el-radio-group v-model="deployType">
+                    <el-radio label="branch">分支</el-radio>
+                    <el-radio label="tag">Tag</el-radio>
+                    <el-radio label="commit">Commit ID</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item label="目标版本">
+                  <el-select v-model="deployTarget" placeholder="选择目标" style="width:100%" v-if="deployType!=='commit'">
+                    <el-option label="main" value="main" /><el-option label="develop" value="develop" /><el-option label="release/v1.2.0" value="release/v1.2.0" />
+                  </el-select>
+                  <el-input v-model="deployTarget" placeholder="输入 Commit ID" v-else />
+                </el-form-item>
+                <el-form-item label="最近提交">
+                  <div style="font-size:13px;color:var(--neutral-500)">
+                    <div style="padding:6px 0;border-bottom:1px solid var(--neutral-100)"><code>a1b2c3d</code> fix: 修复订单超时问题 <span style="float:right">小李 · 2小时前</span></div>
+                    <div style="padding:6px 0;border-bottom:1px solid var(--neutral-100)"><code>e4f5g6h</code> feat: 添加批量导出功能 <span style="float:right">小王 · 5小时前</span></div>
+                    <div style="padding:6px 0"><code>i7j8k9l</code> refactor: 重构支付模块 <span style="float:right">小张 · 1天前</span></div>
+                  </div>
+                </el-form-item>
+              </el-form>
+            </div>
+
+            <!-- Step 2: 确认信息 -->
+            <div v-if="deployStep===1">
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="服务名称">order-service-prod</el-descriptions-item>
+                <el-descriptions-item label="环境"><el-tag size="small" type="danger">prod</el-tag></el-descriptions-item>
+                <el-descriptions-item label="当前版本">20260412_002_v1.0.1</el-descriptions-item>
+                <el-descriptions-item label="目标版本">20260412_003_v1.0.2 (main)</el-descriptions-item>
+                <el-descriptions-item label="预计影响">生产环境服务将短暂不可用（约 10-30 秒）</el-descriptions-item>
+              </el-descriptions>
+            </div>
+
+            <!-- Step 3: 执行部署 -->
+            <div v-if="deployStep===2">
+              <div style="margin-bottom:16px">
+                <div v-for="(step,i) in deploySteps" :key="i" style="display:flex;align-items:center;gap:12px;padding:8px 0">
+                  <span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0" :style="step.done?'background:var(--success-500);color:#fff':step.current?'background:var(--brand-500);color:#fff;animation:pulse 1.5s infinite':'background:var(--neutral-200);color:var(--neutral-500)'">{{step.done?'✓':step.current?'…':i+1}}</span>
+                  <span :style="step.done?'color:var(--success-500)':step.current?'color:var(--brand-500);font-weight:500':'color:var(--neutral-500)'">{{step.name}}</span>
+                  <span v-if="step.done" style="margin-left:auto;font-size:12px;color:var(--success-500)">{{step.time}}</span>
+                </div>
+              </div>
+              <div style="background:#1E1E2D;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;color:#D4D4D4;max-height:200px;overflow-y:auto">
+                <div>[10:05:01] 开始拉取代码...</div>
+                <div style="color:#60A5FA">[10:05:03] git fetch origin main ✓</div>
+                <div style="color:#60A5FA">[10:05:04] git checkout main ✓</div>
+                <div style="color:#60A5FA">[10:05:05] 拉取代码完成 ✓</div>
+                <div>[10:05:06] 开始编译构建...</div>
+              </div>
+            </div>
+
+            <!-- Step 4: 部署结果 -->
+            <div v-if="deployStep===3">
+              <div style="text-align:center;padding:24px">
+                <div style="font-size:48px;margin-bottom:12px">✅</div>
+                <h3 style="color:var(--success-500);margin-bottom:8px">部署成功！</h3>
+                <p style="font-size:13px;color:var(--neutral-500);margin-bottom:16px">新版本: 20260412_003_v1.0.2 · 耗时: 3m 25s</p>
+                <el-button type="primary" @click="deployWizardVisible=false">完成</el-button>
+              </div>
+            </div>
+
+            <template #footer>
+              <el-button v-if="deployStep===3" @click="deployWizardVisible=false">关闭</el-button>
+              <template v-else>
+                <el-button @click="deployWizardVisible=false">取消</el-button>
+                <el-button v-if="deployStep<2" type="primary" @click="deployStep++">{{deployStep===1&&deployEnv==='prod'?'确认并部署':'下一步'}}</el-button>
+                <el-button v-if="deployStep===2" type="primary" @click="deployStep=3" disabled>部署中...</el-button>
+              </template>
+            </template>
+          </el-dialog>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const{createApp,ref,reactive}=Vue;
+    const app=createApp({setup(){
+      const sidebarCollapsed=ref(false),loading=ref(false),error=ref(false),emptyData=ref(false);
+      const showDetail=ref(false),activeTab=ref('deploy');
+      const filterProject=ref(''),filterEnv=ref(''),filterStatus=ref('');
+      const deployWizardVisible=ref(false),deployStep=ref(0),deployType=ref('branch'),deployTarget=ref(''),deployEnv=ref('prod');
+      const logLevel=ref('all'),logSearch=ref(''),autoScroll=ref(true);
+      const serviceData=ref([
+        {name:'order-service-prod',project:'订单系统',module:'order-service',server:'prod-order-01',env:'prod',port:8080,status:'running',version:'20260412_002_v1.0.1'},
+        {name:'order-service-test',project:'订单系统',module:'order-service',server:'test-order-01',env:'test',port:8080,status:'running',version:'20260412_005_v1.1.0'},
+        {name:'user-service-prod',project:'用户中心',module:'user-service',server:'prod-order-02',env:'prod',port:8081,status:'running',version:'20260411_001_v2.0.0'},
+        {name:'gateway-prod',project:'用户中心',module:'gateway',server:'prod-gateway-01',env:'prod',port:8888,status:'running',version:'20260412_001_v1.5.0'},
+        {name:'payment-service-test',project:'订单系统',module:'payment',server:'test-order-02',env:'test',port:8082,status:'stopped',version:'20260410_003_v0.9.0'},
+        {name:'notify-service-dev',project:'订单系统',module:'notify',server:'dev-order-01',env:'dev',port:8083,status:'deploying',version:'20260412_001_v0.9.5'},
+      ]);
+      const deployRecords=ref([
+        {version:'20260412_002_v1.0.1',branch:'main',commit:'a1b2c3d',operator:'小李',startTime:'2026-04-12 10:00',duration:'3m25s',status:'success'},
+        {version:'20260412_001_v1.0.0',branch:'main',commit:'e4f5g6h',operator:'小王',startTime:'2026-04-12 09:30',duration:'4m10s',status:'success'},
+        {version:'20260411_003_v0.9.9',branch:'develop',commit:'i7j8k9l',operator:'小李',startTime:'2026-04-11 18:00',duration:'2m',status:'failed'},
+      ]);
+      const envVars=ref([{key:'SPRING_PROFILES_ACTIVE',value:'prod'},{key:'LOG_LEVEL',value:'INFO'},{key:'DB_POOL_SIZE',value:'20'}]);
+      const scheduleData=ref([{name:'每日凌晨发布',trigger:'Cron',time:'0 2 * * *',branch:'main',rollback:true,dingtalk:true,status:'running'}]);
+      const deploySteps=reactive([
+        {name:'① 拉取代码',done:true,time:'5s'},{name:'② 编译构建',done:true,time:'1m20s'},{name:'③ 打包产物',current:true},{name:'④ 上传至服务器'},{name:'⑤ 切换版本(软链)'},{name:'⑥ 重启服务'},{name:'⑦ 健康检查'},
+      ]);
+      function statusLabel(s){return{running:'运行中',stopped:'已停止',deploying:'部署中',error:'异常'}[s]||s}
+      function handleFilter(){}
+      function resetFilter(){filterProject.value='';filterEnv.value='';filterStatus.value='';}
+      function showServiceDetail(row){showDetail.value=true;}
+      function showDeployWizard(){deployStep.value=0;deployWizardVisible.value=true;}
+      function deployService(row){deployEnv.value=row.env;showDeployWizard();}
+      function restartService(){ElementPlus.ElMessageBox.confirm('确认重启服务？','重启确认',{type:'warning'}).then(()=>{ElementPlus.ElMessage.success('重启指令已发送');}).catch(()=>{});}
+      function deleteService(row){ElementPlus.ElMessage.success('删除成功');}
+      function showCreateDialog(){ElementPlus.ElMessage.info('创建服务向导（分步表单）');}
+      return{sidebarCollapsed,loading,error,emptyData,showDetail,activeTab,filterProject,filterEnv,filterStatus,deployWizardVisible,deployStep,deployType,deployTarget,deployEnv,logLevel,logSearch,autoScroll,serviceData,deployRecords,envVars,scheduleData,deploySteps,statusLabel,handleFilter,resetFilter,showServiceDetail,showDeployWizard,deployService,restartService,deleteService,showCreateDialog};
+    }});
+    app.use(ElementPlus);app.mount('#app');
+  </script>
+</body>
+</html>

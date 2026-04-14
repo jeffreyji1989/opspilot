@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsPilot - 发版部署</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue"></script>
+  <style>
+    :root{--brand-50:#EEF2FF;--brand-500:#6366F1;--brand-600:#4F46E5;--success-50:#ECFDF5;--success-500:#10B981;--warning-50:#FFFBEB;--warning-500:#F59E0B;--error-50:#FEF2F2;--error-500:#EF4444;--info-50:#EFF6FF;--info-500:#3B82F6;--neutral-50:#F9FAFB;--neutral-100:#F3F4F6;--neutral-200:#E5E7EB;--neutral-300:#D1D5DB;--neutral-400:#9CA3AF;--neutral-500:#6B7280;--neutral-600:#4B5563;--neutral-700:#374151;--neutral-800:#1F2937;--neutral-900:#111827;--sidebar-bg:#1E1E2D;--sidebar-hover:#2A2A3C;--sidebar-active:#6366F1;--sidebar-text:#A2A3B7;--sidebar-text-active:#FFFFFF;--radius-sm:4px;--radius-md:8px;--shadow-sm:0 1px 2px rgba(0,0,0,0.05)}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Inter,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--neutral-50);color:var(--neutral-700);font-size:14px}
+    .layout{display:flex;min-height:100vh}
+    .sidebar{width:240px;background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow:hidden}
+    .sidebar.collapsed{width:64px}
+    .sidebar-logo{height:56px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-logo .logo-icon{font-size:24px;margin-right:12px}.sidebar-logo .logo-text{font-size:18px;font-weight:700;color:#fff;white-space:nowrap}
+    .sidebar-menu{flex:1;padding:12px 8px;overflow-y:auto}
+    .menu-item{display:flex;align-items:center;padding:10px 16px;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:all .15s;color:var(--sidebar-text);text-decoration:none}
+    .menu-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
+    .menu-item.active{background:var(--sidebar-active);color:#fff;font-weight:500}
+    .menu-item .icon{width:20px;margin-right:12px;font-size:16px;flex-shrink:0;text-align:center}
+    .sidebar.collapsed .label,.sidebar.collapsed .logo-text{display:none}
+    .sidebar.collapsed .menu-item{justify-content:center;padding:10px}.sidebar.collapsed .menu-item .icon{margin-right:0}
+    .main-content{flex:1;margin-left:240px;display:flex;flex-direction:column;transition:margin-left .3s}
+    .sidebar.collapsed~.main-content{margin-left:64px}
+    .topbar{height:56px;background:#fff;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+    .topbar-left{display:flex;align-items:center;gap:16px}
+    .collapse-btn{cursor:pointer;font-size:20px;color:var(--neutral-500)}
+    .breadcrumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--neutral-500)}
+    .breadcrumb .current{color:var(--neutral-800);font-weight:500}
+    .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-500);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;cursor:pointer}
+    .page-content{flex:1;padding:24px;max-width:1400px;width:100%}
+
+    /* Deploy Wizard */
+    .deploy-wizard{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);box-shadow:var(--shadow-sm);padding:32px}
+    .wizard-header{text-align:center;margin-bottom:32px}
+    .wizard-header h2{font-size:24px;font-weight:600;color:var(--neutral-900);margin-bottom:8px}
+    .wizard-header p{font-size:14px;color:var(--neutral-500)}
+    .step-content{min-height:300px;margin-top:32px}
+    .deploy-steps{display:flex;flex-direction:column;gap:12px;max-width:600px;margin:0 auto}
+    .deploy-step{display:flex;align-items:center;gap:16px;padding:16px;border-radius:8px;background:var(--neutral-50);transition:all .3s}
+    .deploy-step.active{background:var(--brand-50);border:1px solid var(--brand-500)}
+    .deploy-step.success{background:var(--success-50)}
+    .deploy-step.failed{background:var(--error-50)}
+    .deploy-step .step-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+    .deploy-step .step-icon.pending{background:var(--neutral-200);color:var(--neutral-500)}
+    .deploy-step .step-icon.running{background:var(--brand-500);color:#fff;animation:pulse 1.5s ease-in-out infinite}
+    .deploy-step .step-icon.done{background:var(--success-500);color:#fff}
+    .deploy-step .step-icon.fail{background:var(--error-500);color:#fff}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.2)}}
+    .deploy-step .step-name{flex:1;font-size:14px;font-weight:500}
+    .deploy-step .step-time{font-size:12px;color:var(--neutral-500)}
+    .deploy-log{margin-top:24px;background:#1E1E2D;border-radius:8px;padding:16px;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;color:#D4D4D4;max-height:200px;overflow-y:auto}
+    .deploy-log .log-line{white-space:pre-wrap;word-break:break-all;line-height:1.6}
+    .deploy-result{text-align:center;padding:40px}
+    .deploy-result .result-icon{font-size:64px;margin-bottom:16px}
+    .deploy-result h3{font-size:20px;font-weight:600;margin-bottom:8px}
+    .deploy-result p{font-size:14px;color:var(--neutral-500);margin-bottom:24px}
+    .deploy-result .result-actions{display:flex;gap:12px;justify-content:center}
+    .wizard-nav{display:flex;justify-content:space-between;margin-top:32px;padding-top:24px;border-top:1px solid var(--neutral-200)}
+    .prod-warning{background:var(--error-50);border:1px solid var(--error-500);border-radius:8px;padding:16px;display:flex;align-items:center;gap:12px;margin-bottom:16px;font-size:13px;color:var(--error-600)}
+    .card{background:#fff;border-radius:8px;border:1px solid var(--neutral-200);box-shadow:var(--shadow-sm)}
+    @media(max-width:1440px){.page-content{max-width:1200px}}
+    @media(max-width:768px){.sidebar{width:64px}.sidebar .label,.sidebar .logo-text{display:none}.sidebar .menu-item{justify-content:center;padding:10px}.sidebar .menu-item .icon{margin-right:0}.main-content{margin-left:64px!important}.page-content{padding:16px}.deploy-wizard{padding:16px}.deploy-steps{max-width:100%}}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="layout">
+      <aside class="sidebar" :class="{collapsed:sidebarCollapsed}">
+        <div class="sidebar-logo"><span class="logo-icon">🚀</span><span class="logo-text">OpsPilot</span></div>
+        <nav class="sidebar-menu">
+          <a class="menu-item" href="dashboard.html"><span class="icon">🏠</span><span class="label">仪表盘</span></a>
+          <a class="menu-item" href="project-manage.html"><span class="icon">📁</span><span class="label">项目管理</span></a>
+          <a class="menu-item" href="server-manage.html"><span class="icon">🖥️</span><span class="label">服务器管理</span></a>
+          <a class="menu-item" href="git-credential.html"><span class="icon">🔑</span><span class="label">Git 认证</span></a>
+          <a class="menu-item" href="service-instance.html"><span class="icon">🔧</span><span class="label">服务管理</span></a>
+          <a class="menu-item" href="operation-log.html"><span class="icon">📜</span><span class="label">操作日志</span></a>
+          <a class="menu-item" href="schedule-task.html"><span class="icon">⏰</span><span class="label">定时任务</span></a>
+          <a class="menu-item" href="#"><span class="icon">⚙️</span><span class="label">系统设置</span></a>
+        </nav>
+      </aside>
+      <div class="main-content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <span class="collapse-btn" @click="sidebarCollapsed=!sidebarCollapsed">{{sidebarCollapsed?'☰':'✕'}}</span>
+            <div class="breadcrumb"><span>首页</span><span>/</span><a href="service-instance.html" style="color:inherit">服务管理</a><span>/</span><span class="current">发版部署</span></div>
+          </div>
+          <div class="topbar-right"><el-badge :value="3" :max="99"><span style="cursor:pointer;font-size:18px;color:var(--neutral-500)">🔔</span></el-badge><div class="avatar">管</div></div>
+        </header>
+        <main class="page-content">
+          <div class="deploy-wizard">
+            <div class="wizard-header">
+              <h2>🚀 发版部署</h2>
+              <p>服务: <strong>order-service-prod</strong> · 环境: <el-tag size="small" type="danger">prod</el-tag> · 当前版本: <strong>20260412_002_v1.0.1</strong></p>
+            </div>
+
+            <el-steps :active="currentStep" finish-status="success" align-center style="max-width:700px;margin:0 auto">
+              <el-step title="① 选择版本" description="选择分支/Tag/Commit" />
+              <el-step title="② 确认信息" description="确认发版详情" />
+              <el-step title="③ 执行部署" description="实时进度展示" />
+              <el-step title="④ 部署结果" description="成功/失败/回退" />
+            </el-steps>
+
+            <!-- Step 1: 选择版本 -->
+            <div v-show="currentStep===0" class="step-content">
+              <el-form label-width="100px" label-position="right" style="max-width:600px;margin:0 auto">
+                <el-form-item label="选择方式">
+                  <el-radio-group v-model="selectType">
+                    <el-radio-button label="branch">分支</el-radio-button>
+                    <el-radio-button label="tag">Tag</el-radio-button>
+                    <el-radio-button label="commit">Commit ID</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item label="目标版本" v-if="selectType!=='commit'">
+                  <el-select v-model="targetVersion" placeholder="请选择" style="width:100%">
+                    <el-option label="main" value="main"><template #default><span style="font-weight:500">main</span><span style="color:var(--neutral-400);font-size:12px;margin-left:8px">Last commit: 2小时前</span></template></el-option>
+                    <el-option label="develop" value="develop" />
+                    <el-option label="release/v1.2.0" value="release/v1.2.0" />
+                    <el-option label="hotfix/order-timeout" value="hotfix/order-timeout" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="Commit ID" v-else>
+                  <el-input v-model="targetVersion" placeholder="输入完整或前 7 位 Commit Hash" />
+                </el-form-item>
+                <el-form-item label="最近提交">
+                  <div style="width:100%;border:1px solid var(--neutral-200);border-radius:8px;overflow:hidden">
+                    <div style="padding:8px 12px;border-bottom:1px solid var(--neutral-100);display:flex;justify-content:space-between;font-size:13px"><span><code style="background:var(--neutral-100);padding:2px 6px;border-radius:4px;font-size:12px">a1b2c3d</code> fix: 修复订单超时问题</span><span style="color:var(--neutral-400)">小李 · 2h</span></div>
+                    <div style="padding:8px 12px;border-bottom:1px solid var(--neutral-100);display:flex;justify-content:space-between;font-size:13px"><span><code style="background:var(--neutral-100);padding:2px 6px;border-radius:4px;font-size:12px">e4f5g6h</code> feat: 添加批量导出</span><span style="color:var(--neutral-400)">小王 · 5h</span></div>
+                    <div style="padding:8px 12px;display:flex;justify-content:space-between;font-size:13px"><span><code style="background:var(--neutral-100);padding:2px 6px;border-radius:4px;font-size:12px">i7j8k9l</code> refactor: 重构支付模块</span><span style="color:var(--neutral-400)">小张 · 1d</span></div>
+                  </div>
+                </el-form-item>
+              </el-form>
+            </div>
+
+            <!-- Step 2: 确认信息 -->
+            <div v-show="currentStep===1" class="step-content">
+              <div style="max-width:600px;margin:0 auto">
+                <el-descriptions :column="1" border>
+                  <el-descriptions-item label="服务名称">order-service-prod</el-descriptions-item>
+                  <el-descriptions-item label="环境"><el-tag size="small" type="danger">prod (生产环境)</el-tag></el-descriptions-item>
+                  <el-descriptions-item label="目标服务器">172.16.0.10 (prod-order-01)</el-descriptions-item>
+                  <el-descriptions-item label="当前版本">20260412_002_v1.0.1</el-descriptions-item>
+                  <el-descriptions-item label="目标版本">20260412_003_v1.0.2 (main)</el-descriptions-item>
+                  <el-descriptions-item label="目标 Commit"><code style="font-size:12px">a1b2c3d</code></el-descriptions-item>
+                  <el-descriptions-item label="预计影响"><span style="color:var(--error-500)">生产环境服务将短暂不可用（约 10-30 秒）</span></el-descriptions-item>
+                </el-descriptions>
+                <div class="prod-warning" style="margin-top:16px">
+                  <span style="font-size:20px">⚠️</span>
+                  <div><strong>生产环境操作确认</strong><br>此操作将影响生产环境服务，请确认已做好充分测试并选择了正确的目标版本。</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: 执行部署 -->
+            <div v-show="currentStep===2" class="step-content">
+              <div class="deploy-steps">
+                <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">① 拉取代码</div><div class="step-time">5s</div></div>
+                <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">② 编译构建</div><div class="step-time">1m 20s</div></div>
+                <div class="deploy-step active"><div class="step-icon running">3</div><div class="step-name">③ 打包产物</div><div class="step-time">进行中...</div></div>
+                <div class="deploy-step"><div class="step-icon pending">4</div><div class="step-name">④ 上传至服务器</div></div>
+                <div class="deploy-step"><div class="step-icon pending">5</div><div class="step-name">⑤ 切换版本 (软链)</div></div>
+                <div class="deploy-step"><div class="step-icon pending">6</div><div class="step-name">⑥ 重启服务</div></div>
+                <div class="deploy-step"><div class="step-icon pending">7</div><div class="step-name">⑦ 健康检查</div></div>
+              </div>
+              <div class="deploy-log">
+                <div class="log-line" style="color:#60A5FA">[10:05:01] 开始拉取代码...</div>
+                <div class="log-line" style="color:#60A5FA">[10:05:03] git fetch origin main ✓</div>
+                <div class="log-line" style="color:#60A5FA">[10:05:04] git checkout main ✓</div>
+                <div class="log-line" style="color:#34D399">[10:05:05] 拉取代码完成 ✓ (5s)</div>
+                <div class="log-line" style="color:#60A5FA">[10:05:06] 开始编译构建...</div>
+                <div class="log-line" style="color:#60A5FA">[10:05:06] mvn clean package -pl order-service -am -DskipTests</div>
+                <div class="log-line">[INFO] Scanning for projects...</div>
+                <div class="log-line">[INFO] Building order-service 1.0.2-SNAPSHOT</div>
+                <div class="log-line" style="color:#34D399">[10:06:26] 编译构建完成 ✓ (1m 20s)</div>
+                <div class="log-line" style="color:#60A5FA">[10:06:27] 开始打包产物...</div>
+              </div>
+            </div>
+
+            <!-- Step 4: 部署结果（成功） -->
+            <div v-show="currentStep===3" class="step-content">
+              <div class="deploy-result">
+                <div class="result-icon">✅</div>
+                <h3 style="color:var(--success-500)">部署成功！</h3>
+                <p>新版本: <strong>20260412_003_v1.0.2</strong> · 总耗时: <strong>3m 25s</strong></p>
+                <div class="deploy-steps" style="margin-bottom:24px">
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">① 拉取代码</div><div class="step-time">5s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">② 编译构建</div><div class="step-time">1m 20s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">③ 打包产物</div><div class="step-time">10s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">④ 上传至服务器</div><div class="step-time">30s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">⑤ 切换版本 (软链)</div><div class="step-time">2s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">⑥ 重启服务</div><div class="step-time">12s</div></div>
+                  <div class="deploy-step success"><div class="step-icon done">✓</div><div class="step-name">⑦ 健康检查</div><div class="step-time">8s</div></div>
+                </div>
+                <div class="result-actions">
+                  <el-button type="primary" @click="goBack">返回服务详情</el-button>
+                  <el-button>📋 查看详细日志</el-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 导航按钮 -->
+            <div class="wizard-nav" v-show="currentStep<3">
+              <el-button v-if="currentStep>0" @click="currentStep--">上一步</el-button>
+              <div style="flex:1"></div>
+              <el-button v-if="currentStep===0" type="primary" @click="currentStep++">下一步</el-button>
+              <el-button v-if="currentStep===1" type="danger" @click="startDeploy()">⚠️ 确认并开始部署</el-button>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const{createApp,ref}=Vue;
+    const app=createApp({setup(){
+      const sidebarCollapsed=ref(false),currentStep=ref(0),selectType=ref('branch'),targetVersion=ref('');
+      function startDeploy(){
+        ElementPlus.ElMessageBox.confirm('确认在生产环境执行发版部署？','生产环境确认',{type:'warning',confirmButtonText:'确认部署',cancelButtonText:'取消'}).then(()=>{
+          currentStep.value=2;
+          // 模拟部署完成后跳到结果
+          setTimeout(()=>{currentStep.value=3;ElementPlus.ElMessage.success('部署完成！');},5000);
+        }).catch(()=>{});
+      }
+      function goBack(){ElementPlus.ElMessage.info('返回服务详情页');}
+      return{sidebarCollapsed,currentStep,selectType,targetVersion,startDeploy,goBack};
+    }});
+    app.use(ElementPlus);app.mount('#app');
+  </script>
+</body>
+</html>
