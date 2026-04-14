@@ -5,6 +5,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 操作日志实体
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 @Data
 @TableName("t_operation_log")
 public class OperationLog {
@@ -19,6 +25,8 @@ public class OperationLog {
     private String requestMethod;
     private String requestUri;
     private String requestParams;
+    /** 操作结果: success / failed */
+    private String result;
     private Integer responseStatus;
     private String ipAddress;
     private String userAgent;

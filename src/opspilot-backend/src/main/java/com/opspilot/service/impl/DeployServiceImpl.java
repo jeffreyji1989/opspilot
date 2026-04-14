@@ -34,7 +34,9 @@ import java.io.File;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -542,9 +544,10 @@ public class DeployServiceImpl extends ServiceImpl<DeployRecordMapper, DeployRec
     }
 
     /**
-     * 步骤7: 健康检查
+     * 步骤7: 健康检查（3 次重试，间隔 5 秒）
      *
-     * <p>检查服务进程是否存活，如果配置了健康检查路径则检查 HTTP 响应。</p>
+     * <p>检查服务进程是否存活，如果配置了健康检查路径则检查 HTTP 响应。
+     * 最多重试 3 次，每次间隔 5 秒。</p>
      *
      * @param server   目标服务器
      * @param instance 实例信息
@@ -552,25 +555,47 @@ public class DeployServiceImpl extends ServiceImpl<DeployRecordMapper, DeployRec
     private void healthCheck(Server server, ServiceInstance instance) {
         String healthCheckPath = instance.getHealthCheckPath();
         Integer listenPort = instance.getListenPort();
+        int maxRetries = 3;
+        int retryIntervalSec = 5;
 
-        if (StrUtil.isNotBlank(healthCheckPath) && listenPort != null) {
-            // HTTP 健康检查
-            String checkCmd = String.format("curl -s -o /dev/null -w '%%{http_code}' --max-time 10 http://localhost:%d%s",
-                    listenPort, healthCheckPath);
-            String statusCode = sshManager.executeCommand(checkCmd, server, 15);
-            if (!"200".equals(statusCode.trim())) {
-                throw new RuntimeException("健康检查失败, HTTP " + statusCode);
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                if (StrUtil.isNotBlank(healthCheckPath) && listenPort != null) {
+                    // HTTP 健康检查
+                    String checkCmd = String.format("curl -s -o /dev/null -w '%%{http_code}' --max-time 10 http://localhost:%d%s",
+                            listenPort, healthCheckPath);
+                    String statusCode = sshManager.executeCommand(checkCmd, server, 15);
+                    if ("200".equals(statusCode.trim())) {
+                        log.info("HTTP 健康检查通过 (第 {} 次尝试), port={}, path={}", i + 1, listenPort, healthCheckPath);
+                        return;
+                    }
+                    log.warn("HTTP 健康检查未通过 (第 {} 次尝试), HTTP {}", i + 1, statusCode);
+                } else {
+                    // 进程检查
+                    String processCmd = String.format("pgrep -f 'java.*%s'", instance.getDeployPath());
+                    String pidResult = sshManager.executeCommand(processCmd, server, 10);
+                    if (StrUtil.isNotBlank(pidResult)) {
+                        log.info("进程检查通过 (第 {} 次尝试), pid={}", i + 1, pidResult.trim());
+                        return;
+                    }
+                    log.warn("进程检查未通过 (第 {} 次尝试)", i + 1);
+                }
+            } catch (Exception e) {
+                log.warn("健康检查异常 (第 {} 次尝试): {}", i + 1, e.getMessage());
             }
-            log.info("HTTP 健康检查通过, port={}, path={}", listenPort, healthCheckPath);
-        } else {
-            // 进程检查
-            String processCmd = String.format("pgrep -f 'java.*%s'", instance.getDeployPath());
-            String pidResult = sshManager.executeCommand(processCmd, server, 10);
-            if (StrUtil.isBlank(pidResult)) {
-                throw new RuntimeException("进程检查失败，服务未启动");
+
+            if (i < maxRetries - 1) {
+                log.info("健康检查未通过，{} 秒后重试...", retryIntervalSec);
+                try {
+                    Thread.sleep(retryIntervalSec * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("健康检查被中断");
+                }
             }
-            log.info("进程检查通过, pid={}", pidResult.trim());
         }
+
+        throw new RuntimeException(String.format("健康检查失败，已重试 %d 次", maxRetries));
     }
 
     // ==================== 版本回退 ====================
@@ -678,23 +703,49 @@ public class DeployServiceImpl extends ServiceImpl<DeployRecordMapper, DeployRec
     // ==================== 查询接口 ====================
 
     /**
-     * 查询发版进度
+     * 查询发版进度（含步骤详情）
      *
      * @param recordId 部署记录 ID
-     * @return 部署进度信息
+     * @return 部署进度信息，包含各步骤详情
      */
     @Override
-    public Result<DeployRecord> getProgress(Long recordId) {
+    public Result<Map<String, Object>> getProgress(Long recordId) {
         DeployRecord record = deployRecordMapper.selectById(recordId);
         if (record == null) {
             return Result.error("部署记录不存在");
         }
         List<DeployStep> steps = deployStepMapper.selectByRecordId(recordId);
-        return Result.success(record);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("record", record);
+        result.put("steps", steps);
+        return Result.success(result);
     }
 
     /**
-     * 查询发版历史记录
+     * 分页查询发版历史记录
+     *
+     * @param pageNum    页码
+     * @param pageSize   每页大小
+     * @param instanceId 实例 ID（可选）
+     * @param status     状态筛选（可选）
+     * @return 分页结果
+     */
+    @Override
+    public IPage<DeployRecord> pageDeployHistory(int pageNum, int pageSize, Long instanceId, Integer status) {
+        LambdaQueryWrapper<DeployRecord> wrapper = new LambdaQueryWrapper<>();
+        if (instanceId != null) {
+            wrapper.eq(DeployRecord::getInstanceId, instanceId);
+        }
+        if (status != null) {
+            wrapper.eq(DeployRecord::getStatus, status);
+        }
+        wrapper.orderByDesc(DeployRecord::getCreateTime);
+        return page(new Page<>(pageNum, pageSize), wrapper);
+    }
+
+    /**
+     * 查询发版历史记录（不分页）
      *
      * @param moduleId 模块 ID
      * @return 部署历史列表

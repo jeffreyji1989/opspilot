@@ -7,7 +7,14 @@ import com.opspilot.dto.DeployRequest;
 import com.opspilot.entity.DeployRecord;
 
 import java.util.List;
+import java.util.Map;
 
+/**
+ * 发版部署服务接口
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 public interface DeployService extends IService<DeployRecord> {
     Long startDeploy(DeployRequest request, Long operatorId, String username);
     IPage<DeployRecord> pageDeployRecords(int pageNum, int pageSize, Long instanceId);
@@ -25,9 +32,14 @@ public interface DeployService extends IService<DeployRecord> {
     Result<Long> rollback(Long instanceId, String operator);
 
     /**
-     * 查询发版进度
+     * 查询发版进度（含步骤详情）
      */
-    Result<DeployRecord> getProgress(Long recordId);
+    Result<Map<String, Object>> getProgress(Long recordId);
+
+    /**
+     * 分页查询发版历史
+     */
+    IPage<DeployRecord> pageDeployHistory(int pageNum, int pageSize, Long instanceId, Integer status);
 
     /**
      * 查询发版历史记录
