@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 /**
  * 模块实体
  *
- * <p>对应数据库表 {@code t_module}，表示项目下的可独立部署模块。</p>
+ * <p>对应数据库表 {@code t_module}，表示项目下的可独立部署模块。
+ * 支持 7 种类型：JAR/WAR/Vue/React/Node.js/Android/Flutter。</p>
  *
  * @author opspilot-team
  * @since 2026-04-13
@@ -27,7 +28,7 @@ public class Module {
 
     private String moduleName;
 
-    /** 模块类型: java / node / python */
+    /** 模块类型: JAR/WAR/Vue/React/Node.js/Android/Flutter */
     private String moduleType;
 
     /** Git 仓库地址 */
@@ -36,10 +37,19 @@ public class Module {
     /** 分支名称，默认 main */
     private String repoBranch;
 
-    /** 仓库内子路径 */
+    /** 仓库内子路径（Monorepo 场景使用） */
     private String repoPath;
 
-    /** 构建命令，为空时默认使用 mvn clean package -DskipTests */
+    /** Maven 模块名称（用于多模块项目的 -pl 参数） */
+    private String mavenModuleName;
+
+    /** JDK 版本：8/11/17/21 */
+    private String jdkVersion;
+
+    /** Node.js 版本：14/16/18/20 */
+    private String nodeVersion;
+
+    /** 构建命令 */
     private String buildCommand;
 
     /** 构建产物路径 */
@@ -57,6 +67,15 @@ public class Module {
     /** 模块描述 */
     private String description;
 
+    /** 关联的 Git 认证 ID */
+    private Long gitCredId;
+
+    /** 构建工具类型 (maven/npm/gradle等) */
+    private String buildTool;
+
+    /** 模块类型枚举数字（兼容旧字段）: 0=独立仓库，1=Monorepo子模块，2=Maven多模块 */
+    private Integer type;
+
     /** 逻辑删除标记 */
     @TableLogic
     private Integer deleted;
@@ -67,14 +86,8 @@ public class Module {
     /** 更新时间 */
     private LocalDateTime updateTime;
 
-    /** 构建工具类型 (maven/npm/gradle等) */
-    private String buildTool;
-
     // ==================== 兼容字段 ====================
 
-    /**
-     * 兼容旧代码 setCreatedTime(Date) 调用，自动转换为 LocalDateTime
-     */
     public void setCreatedTime(java.util.Date createdTime) {
         if (createdTime != null) {
             this.createTime = createdTime.toInstant()
@@ -83,9 +96,6 @@ public class Module {
         }
     }
 
-    /**
-     * 兼容旧代码 getCreatedTime() 调用，返回 Date 类型
-     */
     public java.util.Date getCreatedTime() {
         if (this.createTime != null) {
             return java.util.Date.from(this.createTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
@@ -93,9 +103,6 @@ public class Module {
         return null;
     }
 
-    /**
-     * 兼容旧代码 setUpdatedTime(Date) 调用，自动转换为 LocalDateTime
-     */
     public void setUpdatedTime(java.util.Date updatedTime) {
         if (updatedTime != null) {
             this.updateTime = updatedTime.toInstant()
@@ -104,9 +111,6 @@ public class Module {
         }
     }
 
-    /**
-     * 兼容旧代码 getUpdatedTime() 调用，返回 Date 类型
-     */
     public java.util.Date getUpdatedTime() {
         if (this.updateTime != null) {
             return java.util.Date.from(this.updateTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
