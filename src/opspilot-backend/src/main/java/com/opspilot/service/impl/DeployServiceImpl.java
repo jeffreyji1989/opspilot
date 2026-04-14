@@ -2,10 +2,14 @@ package com.opspilot.service.impl;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.core.util.ZipUtil;
-import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.opspilot.common.BusinessException;
 import com.opspilot.common.Result;
 import com.opspilot.common.SshManager;
+import com.opspilot.dto.DeployRequest;
 import com.opspilot.entity.DeployRecord;
 import com.opspilot.entity.DeployStep;
 import com.opspilot.entity.Module;
@@ -23,12 +27,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 发版部署服务实现类
@@ -43,16 +52,34 @@ import java.util.List;
  *
  * <p>所有异步操作通过 {@code deployTaskExecutor} 线程池执行，避免 {@code new Thread()} 导致的线程泄漏。</p>
  *
+ * <p>ARCH-001 修复：步骤 1~3（拉代码、编译构建、打包产物）在目标服务器上通过 SSH 执行，
+ * 而非在 OpsPilot 本机执行。</p>
+ *
+ * <p>ARCH-002 修复：使用 JVM 级别 {@code ConcurrentHashMap<String, ReentrantLock>} 按实例 ID 加锁，
+ * 防止同一实例的并发部署。</p>
+ *
+ * <p>ARCH-003 修复：版本号生成规则为 {@code YYYYMMDD_序号_Tag} 格式（如 20260414_001_v1.0.0），
+ * 符合 PRD 8.2 定义。</p>
+ *
  * @author opspilot-team
  * @since 2026-04-13
  */
 @Service
-public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.service.impl.ServiceImpl<DeployRecordMapper, DeployRecord> implements DeployService {
+public class DeployServiceImpl extends ServiceImpl<DeployRecordMapper, DeployRecord> implements DeployService {
 
     private static final Logger log = LoggerFactory.getLogger(DeployServiceImpl.class);
 
-    /** 本地构建产物存放根目录 */
+    /** 本地构建产物暂存根目录（用于从服务器下载产物后暂存） */
     private static final String LOCAL_BUILD_DIR = "/tmp/opspilot/builds";
+
+    /** 版本号日期格式 */
+    private static final DateTimeFormatter VERSION_DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    /** ARCH-002: 按实例 ID 维度的并发部署锁 */
+    private static final ConcurrentHashMap<String, ReentrantLock> DEPLOY_LOCKS = new ConcurrentHashMap<>();
+
+    /** 部署锁超时时间（分钟） */
+    private static final int DEPLOY_LOCK_TIMEOUT_MINUTES = 30;
 
     @Autowired
     private DeployRecordMapper deployRecordMapper;
@@ -74,7 +101,7 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
 
     @Autowired
     @Qualifier("deployTaskExecutor")
-    private org.springframework.core.task.TaskExecutor deployTaskExecutor;
+    private TaskExecutor deployTaskExecutor;
 
     // ==================== 核心部署接口 ====================
 
@@ -83,6 +110,8 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      *
      * <p>创建部署记录，并在异步线程中执行 7 步标准化发版流程。
      * 调用方通过 {@link #getProgress(Long)} 查询实时进度。</p>
+     *
+     * <p>ARCH-002: 使用实例级分布式锁防止并发部署。</p>
      *
      * @param moduleId   模块 ID
      * @param instanceId 实例 ID
@@ -120,10 +149,12 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
         }
 
         // 5. 创建部署记录
+        // ARCH-003 修复: 使用 YYYYMMDD_序号_Tag 格式生成版本号
+        String version = generateVersion(module);
         DeployRecord record = new DeployRecord();
         record.setModuleId(moduleId);
         record.setInstanceId(instanceId);
-        record.setVersion("v" + System.currentTimeMillis());
+        record.setVersion(version);
         record.setDeployType("normal");
         record.setStatus(DeployStatusEnum.PENDING.getCode());
         record.setOperator(operator);
@@ -131,7 +162,7 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
         deployRecordMapper.insert(record);
 
         Long recordId = record.getId();
-        log.info("创建部署记录成功, recordId={}", recordId);
+        log.info("创建部署记录成功, recordId={}, version={}", recordId, version);
 
         // 6. 异步执行部署流程
         final Long finalRecordId = recordId;
@@ -147,6 +178,9 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      *
      * <p>流程：拉取代码 → 编译构建 → 打包产物 → 上传至服务器 → 切换版本 → 重启服务 → 健康检查</p>
      *
+     * <p>ARCH-001: 步骤 1~3 在目标服务器上通过 SSH 执行，而非在 OpsPilot 本机执行。</p>
+     * <p>ARCH-002: 使用实例级并发锁保护整个部署流程。</p>
+     *
      * @param recordId 部署记录 ID
      * @param module   模块信息
      * @param instance 实例信息
@@ -155,73 +189,123 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
     private void executeDeploy(Long recordId, Module module, ServiceInstance instance, String operator) {
         log.info("开始执行发版流程, recordId={}, module={}, instance={}", recordId, module.getModuleName(), instance.getInstanceName());
 
-        // 更新实例状态为部署中
-        serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.RUNNING.getCode());
-
-        // 查询服务器信息
-        Server server = serverMapper.selectById(instance.getServerId());
-        if (server == null) {
-            log.error("服务器不存在, serverId={}", instance.getServerId());
-            updateRecordStatus(recordId, DeployStatusEnum.FAILED, "服务器不存在");
+        // ARCH-002: 按实例 ID 获取并发部署锁
+        String lockKey = String.valueOf(instance.getId());
+        ReentrantLock lock = DEPLOY_LOCKS.computeIfAbsent(lockKey, k -> new ReentrantLock());
+        boolean acquired = false;
+        try {
+            acquired = lock.tryLock(DEPLOY_LOCK_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("获取部署锁被中断, instanceId={}", instance.getId());
+            updateRecordStatus(recordId, DeployStatusEnum.FAILED, "获取部署锁被中断");
+            return;
+        }
+        if (!acquired) {
+            log.warn("获取部署锁超时, instanceId={}, 可能存在并发部署", instance.getId());
+            updateRecordStatus(recordId, DeployStatusEnum.FAILED, "获取部署锁超时，该实例正在部署中");
             serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.FAILED.getCode());
             return;
         }
 
-        // 生成本地构建目录
-        String buildBaseDir = LOCAL_BUILD_DIR + "/" + recordId;
-        String projectDir = buildBaseDir + "/" + module.getModuleName();
-        FileUtil.mkdir(buildBaseDir);
-
-        boolean success = true;
-
         try {
-            // Step 1: 拉取代码
-            success = executeStep(recordId, 1, () -> pullCode(module, projectDir));
-            if (!success) return;
+            log.info("获取部署锁成功, instanceId={}", instance.getId());
 
-            // Step 2: 编译构建
-            success = executeStep(recordId, 2, () -> buildProject(module, projectDir));
-            if (!success) return;
+            // 更新实例状态为部署中
+            serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.RUNNING.getCode());
 
-            // Step 3: 打包产物
-            String artifactPath = packageArtifact(module, projectDir, buildBaseDir);
-            if (StrUtil.isBlank(artifactPath)) {
-                failStep(recordId, 3, "打包产物失败，未找到构建产物");
+            // 查询服务器信息
+            Server server = serverMapper.selectById(instance.getServerId());
+            if (server == null) {
+                log.error("服务器不存在, serverId={}", instance.getServerId());
+                updateRecordStatus(recordId, DeployStatusEnum.FAILED, "服务器不存在");
+                serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.FAILED.getCode());
                 return;
             }
 
-            // Step 4: 上传至服务器
-            success = executeStep(recordId, 4, () -> uploadToServer(server, artifactPath, instance.getDeployPath()));
-            if (!success) return;
+            // 生成本地暂存目录（用于从服务器下载产物后暂存）
+            String buildBaseDir = LOCAL_BUILD_DIR + "/" + recordId;
+            FileUtil.mkdir(buildBaseDir);
 
-            // Step 5: 切换版本（软链切换）
-            success = executeStep(recordId, 5, () -> switchVersion(server, instance, artifactPath));
-            if (!success) return;
+            // ARCH-001: 在目标服务器上创建远程构建目录
+            String remoteBuildDir = instance.getDeployPath() + "/_build_" + recordId;
 
-            // Step 6: 重启服务
-            success = executeStep(recordId, 6, () -> restartService(server, instance));
-            if (!success) return;
+            boolean success = true;
 
-            // Step 7: 健康检查
-            success = executeStep(recordId, 7, () -> healthCheck(server, instance));
-            if (!success) return;
+            try {
+                // Step 1: 拉取代码（在目标服务器上执行）
+                success = executeStep(recordId, 1, () -> pullCode(module, remoteBuildDir, server));
+                if (!success) {
+                    return;
+                }
 
-            // 全部成功
-            updateRecordStatus(recordId, DeployStatusEnum.SUCCESS, "部署成功");
-            serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.SUCCESS.getCode());
-            DeployRecord successRecord = deployRecordMapper.selectById(recordId);
-            String version = successRecord != null ? successRecord.getVersion() : "unknown";
-            serviceInstanceMapper.updateCurrentVersion(instance.getId(), version);
-            log.info("发版部署成功, recordId={}, version={}", recordId, version);
+                // Step 2: 编译构建（在目标服务器上执行）
+                success = executeStep(recordId, 2, () -> buildProject(module, remoteBuildDir, server));
+                if (!success) {
+                    return;
+                }
+
+                // Step 3: 打包产物（在目标服务器上查找产物，下载到本地暂存）
+                String artifactPath = packageArtifact(module, remoteBuildDir, buildBaseDir, server);
+                if (StrUtil.isBlank(artifactPath)) {
+                    failStep(recordId, 3, "打包产物失败，未找到构建产物");
+                    return;
+                }
+
+                // Step 4: 上传至服务器（从本地暂存目录上传到目标服务器）
+                success = executeStep(recordId, 4, () -> uploadToServer(server, artifactPath, instance.getDeployPath()));
+                if (!success) {
+                    return;
+                }
+
+                // 读取部署记录获取版本号
+                DeployRecord currentRecord = deployRecordMapper.selectById(recordId);
+                String version = currentRecord != null ? currentRecord.getVersion() : "unknown";
+
+                // Step 5: 切换版本（软链切换）
+                success = executeStep(recordId, 5, () -> switchVersion(server, instance, version));
+                if (!success) {
+                    return;
+                }
+
+                // Step 6: 重启服务
+                success = executeStep(recordId, 6, () -> restartService(server, instance));
+                if (!success) {
+                    return;
+                }
+
+                // Step 7: 健康检查
+                success = executeStep(recordId, 7, () -> healthCheck(server, instance));
+                if (!success) {
+                    return;
+                }
+
+                // 全部成功
+                updateRecordStatus(recordId, DeployStatusEnum.SUCCESS, "部署成功");
+                serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.SUCCESS.getCode());
+                serviceInstanceMapper.updateCurrentVersion(instance.getId(), version);
+                log.info("发版部署成功, recordId={}, version={}", recordId, version);
+
+            } finally {
+                // 清理远程构建目录和本地暂存目录
+                try {
+                    sshManager.executeCommand("rm -rf " + remoteBuildDir, server, 30);
+                    log.info("清理远程构建目录, dir={}", remoteBuildDir);
+                } catch (Exception e) {
+                    log.warn("清理远程构建目录失败: {}", e.getMessage());
+                }
+                FileUtil.del(buildBaseDir);
+                log.info("清理本地暂存目录, dir={}", buildBaseDir);
+            }
 
         } catch (Exception e) {
             log.error("发版部署异常, recordId={}", recordId, e);
             updateRecordStatus(recordId, DeployStatusEnum.FAILED, "部署异常: " + e.getMessage());
             serviceInstanceMapper.updateProcessStatus(instance.getId(), DeployStatusEnum.FAILED.getCode());
         } finally {
-            // 清理本地构建目录
-            FileUtil.del(buildBaseDir);
-            log.info("清理本地构建目录, dir={}", buildBaseDir);
+            // ARCH-002: 释放部署锁
+            lock.unlock();
+            log.info("释放部署锁, instanceId={}", instance.getId());
         }
     }
 
@@ -230,19 +314,27 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
     /**
      * 步骤1: 拉取代码
      *
-     * <p>从 Git 仓库拉取代码到本地构建目录。支持 SSH key 认证。</p>
+     * <p>ARCH-001 修复: 在目标服务器上通过 SSH 执行 Git 命令拉取代码。</p>
      *
-     * @param module    模块信息（包含仓库地址、分支、代码路径）
-     * @param projectDir 本地项目目录
+     * @param module        模块信息（包含仓库地址、分支、代码路径）
+     * @param remoteBuildDir 目标服务器上的构建目录
+     * @param server        目标服务器
      */
-    private void pullCode(Module module, String projectDir) {
+    private void pullCode(Module module, String remoteBuildDir, Server server) {
         String repoUrl = module.getRepoUrl();
         String branch = StrUtil.isNotBlank(module.getRepoBranch()) ? module.getRepoBranch() : "main";
+        String projectDir = remoteBuildDir + "/" + module.getModuleName();
 
-        // 如果已存在 .git 目录，执行 pull 更新
-        if (FileUtil.exist(projectDir + "/.git")) {
+        // 确保远程目录存在
+        sshManager.executeCommand("mkdir -p " + remoteBuildDir, server, 30);
+
+        // 如果远程已存在 .git 目录，执行 pull 更新
+        String gitCheckCmd = String.format("test -d %s/.git && echo 'exists' || echo 'not_exists'", projectDir);
+        String gitCheckResult = sshManager.executeCommand(gitCheckCmd, server, 10);
+
+        if ("exists".equals(gitCheckResult.trim())) {
             String pullCmd = String.format("cd %s && git pull origin %s", projectDir, branch);
-            String pullResult = sshManager.executeCommand(pullCmd, null, 120);
+            String pullResult = sshManager.executeCommand(pullCmd, server, 120);
             if (StrUtil.isBlank(pullResult) || pullResult.contains("Already up to date") || pullResult.contains("Updating")) {
                 log.info("代码更新成功, branch={}", branch);
             } else {
@@ -251,9 +343,8 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
             }
         } else {
             // 首次克隆
-            FileUtil.mkdir(projectDir);
-            String cloneCmd = String.format("git clone -b %s %s %s", branch, repoUrl, projectDir);
-            String cloneResult = sshManager.executeCommand(cloneCmd, null, 180);
+            String cloneCmd = String.format("cd %s && git clone -b %s %s %s", remoteBuildDir, branch, repoUrl, module.getModuleName());
+            String cloneResult = sshManager.executeCommand(cloneCmd, server, 180);
             if (cloneResult.contains("fatal") || cloneResult.contains("error")) {
                 log.error("代码克隆失败, repoUrl={}, result={}", repoUrl, cloneResult);
                 throw new RuntimeException("代码克隆失败: " + cloneResult);
@@ -265,20 +356,22 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
     /**
      * 步骤2: 编译构建
      *
-     * <p>根据模块类型执行对应的构建命令（Maven/Node.js/Python 等）。</p>
+     * <p>ARCH-001 修复: 在目标服务器上通过 SSH 执行构建命令。</p>
      *
-     * @param module     模块信息（包含构建命令）
-     * @param projectDir 本地项目目录
+     * @param module        模块信息（包含构建命令）
+     * @param remoteBuildDir 目标服务器上的构建目录
+     * @param server        目标服务器
      */
-    private void buildProject(Module module, String projectDir) {
+    private void buildProject(Module module, String remoteBuildDir, Server server) {
         String buildCmd = module.getBuildCommand();
         if (StrUtil.isBlank(buildCmd)) {
             // 默认使用 Maven 构建
             buildCmd = "mvn clean package -DskipTests";
         }
 
+        String projectDir = remoteBuildDir + "/" + module.getModuleName();
         String fullCmd = String.format("cd %s && %s", projectDir, buildCmd);
-        String buildResult = sshManager.executeCommand(fullCmd, null, 300);
+        String buildResult = sshManager.executeCommand(fullCmd, server, 300);
 
         if (buildResult.contains("BUILD FAILURE") || buildResult.contains("ERROR") || buildResult.contains("error")) {
             log.error("编译构建失败, module={}, result={}", module.getModuleName(), buildResult);
@@ -290,55 +383,62 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
     /**
      * 步骤3: 打包产物
      *
-     * <p>查找构建产物（JAR/WAR 文件），如果找到多个则打包为 ZIP。</p>
+     * <p>ARCH-001 修复: 在目标服务器上查找构建产物，下载到本地暂存目录。</p>
      *
-     * @param module     模块信息
-     * @param projectDir 本地项目目录
-     * @param buildBaseDir 构建基础目录
-     * @return 打包后的产物路径，未找到则返回 null
+     * @param module        模块信息
+     * @param remoteBuildDir 目标服务器上的构建目录
+     * @param localBuildDir  本地暂存目录
+     * @param server        目标服务器
+     * @return 本地暂存目录中的产物路径，未找到则返回 null
      */
-    private String packageArtifact(Module module, String projectDir, String buildBaseDir) {
+    private String packageArtifact(Module module, String remoteBuildDir, String localBuildDir, Server server) {
         String artifactPath = module.getArtifactPath();
-        String targetDir = projectDir + "/target";
+        String remoteTargetDir = remoteBuildDir + "/" + module.getModuleName() + "/target";
 
-        // 优先使用模块配置的产物路径
-        if (StrUtil.isNotBlank(artifactPath) && FileUtil.exist(artifactPath)) {
-            log.info("使用指定产物路径: {}", artifactPath);
-            return artifactPath;
+        // 优先使用模块配置的产物路径（远程）
+        if (StrUtil.isNotBlank(artifactPath)) {
+            String checkCmd = String.format("test -f %s && echo 'exists' || echo 'not_exists'", artifactPath);
+            String checkResult = sshManager.executeCommand(checkCmd, server, 10);
+            if ("exists".equals(checkResult.trim())) {
+                // 远程产物存在，下载到本地
+                String fileName = new File(artifactPath).getName();
+                String localPath = localBuildDir + "/" + fileName;
+                boolean downloaded = sshManager.downloadFile(artifactPath, localPath, server);
+                if (downloaded) {
+                    log.info("使用指定产物路径并下载到本地: {} -> {}", artifactPath, localPath);
+                    return localPath;
+                }
+            }
         }
 
-        // 从 target 目录查找 JAR/WAR
-        File targetDirFile = new File(targetDir);
-        if (!targetDirFile.exists()) {
-            log.error("构建产物目录不存在: {}", targetDir);
+        // 从远程 target 目录查找 JAR/WAR
+        String findCmd = String.format("find %s -maxdepth 1 -name '*.jar' -o -name '*.war' | head -1", remoteTargetDir);
+        String remoteArtifact = sshManager.executeCommand(findCmd, server, 30).trim();
+
+        if (StrUtil.isBlank(remoteArtifact)) {
+            log.error("未找到构建产物, remoteTargetDir={}", remoteTargetDir);
             return null;
         }
 
-        File[] artifacts = targetDirFile.listFiles(f -> f.getName().endsWith(".jar") || f.getName().endsWith(".war"));
-        if (artifacts == null || artifacts.length == 0) {
-            log.error("未找到构建产物, targetDir={}", targetDir);
+        // 下载产物到本地暂存目录
+        String fileName = new File(remoteArtifact).getName();
+        String localPath = localBuildDir + "/" + fileName;
+        boolean downloaded = sshManager.downloadFile(remoteArtifact, localPath, server);
+        if (!downloaded) {
+            log.error("下载构建产物失败, remoteArtifact={}", remoteArtifact);
             return null;
         }
 
-        if (artifacts.length == 1) {
-            String path = artifacts[0].getAbsolutePath();
-            log.info("找到构建产物: {}", path);
-            return path;
-        }
-
-        // 多个产物，打包为 ZIP
-        String zipPath = buildBaseDir + "/" + module.getModuleName() + "-" + System.currentTimeMillis() + ".zip";
-        ZipUtil.zip(targetDir, zipPath);
-        log.info("多个产物已打包为 ZIP: {}", zipPath);
-        return zipPath;
+        log.info("构建产物已下载到本地: {} -> {}", remoteArtifact, localPath);
+        return localPath;
     }
 
     /**
      * 步骤4: 上传至服务器
      *
-     * <p>将构建产物上传到目标服务器的部署目录。</p>
+     * <p>将构建产物从本地暂存目录上传到目标服务器的部署目录。</p>
      *
-     * @param server      服务器信息
+     * @param server       目标服务器
      * @param artifactPath 本地产物路径
      * @param deployPath   远程部署目录
      */
@@ -367,23 +467,23 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      * 步骤5: 切换版本（软链切换）
      *
      * <p>通过软链切换实现快速版本切换，支持一键回退。
-     * 目录结构：deployPath/current → versions/v{timestamp}/</p>
+     * 目录结构：deployPath/versions/{版本号}/</p>
      *
-     * @param server   服务器信息
+     * @param server   目标服务器
      * @param instance 实例信息
-     * @param artifactPath 上传的产物路径
+     * @param version  版本号（ARCH-003: YYYYMMDD_序号_Tag 格式）
      */
-    private void switchVersion(Server server, ServiceInstance instance, String artifactPath) {
+    private void switchVersion(Server server, ServiceInstance instance, String version) {
         String deployPath = instance.getDeployPath();
-        String versionDir = deployPath + "/versions/v" + System.currentTimeMillis();
+        String versionDir = deployPath + "/versions/" + version;
         String currentLink = deployPath + "/current";
 
-        String fileName = FileUtil.getName(artifactPath);
+        String uploadsDir = deployPath + "/uploads";
 
-        // 创建版本目录
+        // 创建版本目录，复制上传的产物到版本目录
         String switchCmd = String.format(
-                "mkdir -p %s && cp %s/uploads/%s %s/%s",
-                versionDir, deployPath, fileName, versionDir, fileName);
+                "mkdir -p %s && cp %s/* %s/ 2>/dev/null; ls %s/ | wc -l",
+                versionDir, uploadsDir, versionDir, versionDir);
         String result = sshManager.executeCommand(switchCmd, server, 60);
         if (result.contains("No space left") || result.contains("Permission denied")) {
             throw new RuntimeException("切换版本失败: " + result);
@@ -401,7 +501,7 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      *
      * <p>停止旧进程，启动新版本服务。启动命令从实例配置中获取。</p>
      *
-     * @param server   服务器信息
+     * @param server   目标服务器
      * @param instance 实例信息
      */
     private void restartService(Server server, ServiceInstance instance) {
@@ -446,11 +546,10 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      *
      * <p>检查服务进程是否存活，如果配置了健康检查路径则检查 HTTP 响应。</p>
      *
-     * @param server   服务器信息
+     * @param server   目标服务器
      * @param instance 实例信息
      */
     private void healthCheck(Server server, ServiceInstance instance) {
-        // 检查进程
         String healthCheckPath = instance.getHealthCheckPath();
         Integer listenPort = instance.getListenPort();
 
@@ -582,7 +681,7 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
      * 查询发版进度
      *
      * @param recordId 部署记录 ID
-     * @return 部署进度信息，包含当前步骤、状态和各步骤详情
+     * @return 部署进度信息
      */
     @Override
     public Result<DeployRecord> getProgress(Long recordId) {
@@ -630,7 +729,7 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
         step.setRecordId(recordId);
         step.setStepNo(stepNo);
         step.setStepName(stepEnum.getStepName());
-        step.setStatus(0); // 执行中
+        step.setStatus(0); // 0=执行中
         step.setCreatedTime(new Date());
         deployStepMapper.insert(step);
 
@@ -671,37 +770,93 @@ public class DeployServiceImpl extends com.baomidou.mybatisplus.extension.servic
     /**
      * 更新部署记录状态
      *
-     * @param recordId  部署记录 ID
-     * @param status    目标状态枚举
-     * @param message   状态描述消息
+     * @param recordId 部署记录 ID
+     * @param status   目标状态枚举
+     * @param message  状态描述消息
      */
     private void updateRecordStatus(Long recordId, DeployStatusEnum status, String message) {
         deployRecordMapper.updateStatus(recordId, status.getCode());
         log.info("更新部署状态, recordId={}, status={}, message={}", recordId, status.getDescription(), message);
     }
 
+    // ==================== ARCH-003: 版本号生成 ====================
+
+    /**
+     * 生成版本号
+     *
+     * <p>ARCH-003 修复: 按照 PRD 8.2 规则生成版本号，格式为 {@code YYYYMMDD_序号_Tag}。
+     * 示例：20260414_001_v1.0.0</p>
+     *
+     * <p>序号为当天该模块的部署次数 + 1，从数据库查询当天最大序号计算得出。</p>
+     *
+     * @param module 模块信息
+     * @return 版本号字符串
+     */
+    private String generateVersion(Module module) {
+        String dateStr = LocalDate.now().format(VERSION_DATE_FMT);
+        int seq = getNextVersionSeq(module.getId(), dateStr);
+        String tag = StrUtil.isNotBlank(module.getModuleName()) ? module.getModuleName() : "default";
+        return String.format("%s_%03d_%s", dateStr, seq, tag);
+    }
+
+    /**
+     * 查询当天该模块的下一个版本序号
+     *
+     * @param moduleId 模块 ID
+     * @param dateStr  日期字符串（yyyyMMdd）
+     * @return 下一个序号（从 1 开始）
+     */
+    private int getNextVersionSeq(Long moduleId, String dateStr) {
+        try {
+            // 查询当天该模块已部署的最大序号
+            // 版本号格式: YYYYMMDD_序号_Tag，使用 LIKE 前缀匹配
+            String versionPrefix = dateStr + "_";
+            LambdaQueryWrapper<DeployRecord> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(DeployRecord::getModuleId, moduleId)
+                    .likeRight(DeployRecord::getVersion, versionPrefix)
+                    .ne(DeployRecord::getDeployType, "rollback")
+                    .orderByDesc(DeployRecord::getVersion)
+                    .last("LIMIT 1");
+            DeployRecord latest = deployRecordMapper.selectOne(wrapper);
+
+            if (latest != null && latest.getVersion() != null) {
+                String version = latest.getVersion();
+                // 提取序号部分: YYYYMMDD_001_tag → 001
+                int firstUnderscore = version.indexOf('_');
+                int secondUnderscore = version.indexOf('_', firstUnderscore + 1);
+                if (firstUnderscore > 0 && secondUnderscore > firstUnderscore) {
+                    String seqStr = version.substring(firstUnderscore + 1, secondUnderscore);
+                    int maxSeq = Integer.parseInt(seqStr);
+                    return maxSeq + 1;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("查询版本序号失败，使用默认序号 1: {}", e.getMessage());
+        }
+        return 1;
+    }
+
     // ==================== IService 接口方法 ====================
 
     @Override
-    public Long startDeploy(com.opspilot.dto.DeployRequest request, Long operatorId, String username) {
+    public Long startDeploy(DeployRequest request, Long operatorId, String username) {
         // 从实例获取moduleId
         ServiceInstance instance = serviceInstanceMapper.selectById(request.getInstanceId());
         if (instance == null || instance.getModuleId() == null) {
-            throw new com.opspilot.common.BusinessException("服务实例或模块不存在");
+            throw new BusinessException("服务实例或模块不存在");
         }
         Result<Long> result = deploy(instance.getModuleId(), request.getInstanceId(), username);
         return result.isSuccess() ? result.getData() : null;
     }
 
     @Override
-    public com.baomidou.mybatisplus.core.metadata.IPage<DeployRecord> pageDeployRecords(int pageNum, int pageSize, Long instanceId) {
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DeployRecord> wrapper =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+    public IPage<DeployRecord> pageDeployRecords(int pageNum, int pageSize, Long instanceId) {
+        LambdaQueryWrapper<DeployRecord> wrapper = new LambdaQueryWrapper<>();
         if (instanceId != null) {
             wrapper.eq(DeployRecord::getInstanceId, instanceId);
         }
         wrapper.orderByDesc(DeployRecord::getCreateTime);
-        return page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize), wrapper);
+        return page(new Page<>(pageNum, pageSize), wrapper);
     }
 
     @Override
