@@ -28,4 +28,8 @@ public class Server {
     private Integer deleted;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    /** JDK 版本列表（JSON 数组字符串） */
+    private String jdkVersions;
+    /** Node.js 版本列表（JSON 数组字符串） */
+    private String nodeVersions;
 }

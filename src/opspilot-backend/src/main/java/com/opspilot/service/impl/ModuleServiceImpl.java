@@ -105,12 +105,20 @@ public class ModuleServiceImpl extends ServiceImpl<ModuleMapper, Module> impleme
         log.info("模块删除成功: id={}, name={}", id, module.getModuleName());
     }
 
+    /** 数字模块类型到字符串键的映射 */
+    private static final Map<String, String> MODULE_TYPE_MAP = Map.of(
+            "0", "JAR", "1", "Vue", "2", "React", "3", "Node.js",
+            "4", "WAR", "5", "Android", "6", "Flutter"
+    );
+
     @Override
     public Map<String, String> getBuildTemplate(String moduleType) {
         if (!StringUtils.hasText(moduleType)) {
             throw new BusinessException("模块类型不能为空");
         }
-        Map<String, String> template = BUILD_TEMPLATES.get(moduleType);
+        // 支持数字类型映射（如 0→JAR, 1→Vue）
+        String resolvedType = MODULE_TYPE_MAP.getOrDefault(moduleType, moduleType);
+        Map<String, String> template = BUILD_TEMPLATES.get(resolvedType);
         if (template == null) {
             throw new BusinessException("不支持的模块类型: " + moduleType);
         }
@@ -131,10 +139,12 @@ public class ModuleServiceImpl extends ServiceImpl<ModuleMapper, Module> impleme
         if (!StringUtils.hasText(moduleType)) {
             moduleType = "JAR";
         }
+        // 支持数字类型映射
+        moduleType = MODULE_TYPE_MAP.getOrDefault(moduleType, moduleType);
 
         Map<String, String> template = BUILD_TEMPLATES.get(moduleType);
         if (template == null) {
-            throw new BusinessException("不支持的模块类型: " + moduleType);
+            throw new BusinessException("不支持的模块类型: " + module.getModuleType());
         }
 
         String buildCommand = template.get("buildCommand");
