@@ -8,6 +8,12 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/**
+ * 发版步骤 Mapper
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 @Mapper
 public interface DeployStepMapper extends BaseMapper<DeployStep> {
 
@@ -22,4 +28,10 @@ public interface DeployStepMapper extends BaseMapper<DeployStep> {
      */
     @Update("UPDATE t_deploy_step SET status = #{status} WHERE id = #{id}")
     int updateStatus(Long id, int status);
+
+    /**
+     * 更新步骤错误信息
+     */
+    @Update("UPDATE t_deploy_step SET error_message = #{message} WHERE id = #{id}")
+    int updateErrorMessage(Long id, String message);
 }

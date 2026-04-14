@@ -68,6 +68,13 @@ opspilot:
     key: ${OPSPILOT_AES_KEY:DefaultAesKey16Ch}
   ssh:
     private-key-path: ${user.home}/.opspilot/ssh/id_rsa
+  deploy:
+    build-timeout: 300
+    health-check-timeout: 60
+    health-check-path: /actuator/health
+  dingtalk:
+    webhook: ${OPSPILOT_DINGTALK_WEBHOOK:}
+    secret: ${OPSPILOT_DINGTALK_SECRET:}
 
 logging:
   level:

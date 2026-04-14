@@ -15,6 +15,8 @@ const routes = [
       { path: 'services', name: 'Services', component: () => import('../views/Services.vue'), meta: { title: '服务管理' } },
       { path: 'services/:id', name: 'ServiceDetail', component: () => import('../views/ServiceDetail.vue'), meta: { title: '服务详情' } },
       { path: 'operation-logs', name: 'OperationLogs', component: () => import('../views/OperationLogs.vue'), meta: { title: '操作日志' } },
+      { path: 'schedule-tasks', name: 'ScheduleTasks', component: () => import('../views/ScheduleTasks.vue'), meta: { title: '定时任务' } },
+      { path: 'system-settings', name: 'SystemSettings', component: () => import('../views/SystemSettings.vue'), meta: { title: '系统设置' } },
     ]
   }
 ]

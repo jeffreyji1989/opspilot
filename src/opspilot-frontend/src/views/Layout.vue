@@ -30,6 +30,14 @@
           <el-icon><Document /></el-icon>
           <span>操作日志</span>
         </el-menu-item>
+        <el-menu-item index="/schedule-tasks">
+          <el-icon><Clock /></el-icon>
+          <span>定时任务</span>
+        </el-menu-item>
+        <el-menu-item index="/system-settings">
+          <el-icon><Setting /></el-icon>
+          <span>系统设置</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
