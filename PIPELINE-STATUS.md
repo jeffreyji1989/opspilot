@@ -23,7 +23,7 @@
 | 💻 全栈A | ✅ 完成 | v1.0-foundation 分支 | 编译通过 | 空闲 |
 | 💻 全栈B | ✅ 完成 | v1.0-ops-v2 分支 | 编译通过 | 空闲 |
 | 🧪 QA | 🔄 回归中 | test-reports/opspilot-test-report-e2e.md | 92% | 修复P1 → 最终报告 |
-| 💻 部署 | ⏳ 待执行 | - | - | GitHub推送 + v1.0标签 |
+| 💻 全栈 | 🔄 修复中 | bugfix/v2-npe-todo-fix-20260415 | 进行中 | 修DeployController + 推GitHub |
 
 ## 🐛 Bug 追踪
 
@@ -44,6 +44,13 @@
 4. **07:11** 更新 migration-v1.0.sql，补充 t_server 字段
 5. **07:12** 编译成功，重启后端
 6. **07:13** E2E 复测：通过率 **55% → 92%** ✅
+7. **07:15** 修测试脚本bug（无token测试误发Authorization头） → **E2E 100%** (14/14)
+8. **07:17** Git commit 24621a6 到 test 分支 ✅
+9. **07:18** GitHub 推送失败（网络不通，HTTPS 75s超时，SSH 无key）→ 设置自动重试
+
+## ⏰ 自动重试任务
+- `opspilot-push-retry`: 每小时尝试 `git push origin test`，成功后关闭
+- 已提交 commit: `24621a6` (test分支)
 
 ## ⚠️ 阻塞检测规则
 
@@ -55,8 +62,10 @@
 
 ## 📋 待办（按优先级）
 
-1. [ ] P1: 修复无token访问未返回401（拦截器配置问题）
-2. [ ] E2E 通过率达标后，QA 出具最终测试报告
-3. [ ] 架构师代码复审 v2
-4. [ ] GitHub 推送 master + 打 v1.0 标签
-5. [ ] 部署生产环境
+1. [x] QA 最终报告 ✅
+2. [x] 架构师复审 v2 ✅
+3. [ ] 全栈修复 DeployController NPE + TODO（派发中，预计 5min）
+4. [ ] 全栈推送 GitHub（网络重试）
+5. [ ] QA 回归测试（修复后）
+6. [ ] test→master 合并 + v1.0 标签
+7. [ ] 部署生产

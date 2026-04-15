@@ -8,6 +8,7 @@ import com.opspilot.entity.DeployStep;
 import com.opspilot.entity.Module;
 import com.opspilot.entity.Server;
 import com.opspilot.entity.ServiceInstance;
+import com.opspilot.mapper.DeployRecordMapper;
 import com.opspilot.mapper.DeployStepMapper;
 import com.opspilot.mapper.ModuleMapper;
 import com.opspilot.mapper.ServerMapper;
@@ -55,6 +56,9 @@ public class DeployController {
     @Autowired
     private GitService gitService;
 
+    @Autowired
+    private DeployRecordMapper deployRecordMapper;
+
     /**
      * 发起发版部署
      *
@@ -63,21 +67,29 @@ public class DeployController {
      */
     @PostMapping("/execute")
     public Result<Long> executeDeploy(@RequestBody Map<String, Object> request) {
-        Long moduleId = Long.valueOf(request.get("moduleId").toString());
-        Long instanceId = Long.valueOf(request.get("instanceId").toString());
+        if (request == null) {
+            return Result.error("请求参数不能为空");
+        }
+        Object moduleIdObj = request.get("moduleId");
+        Object instanceIdObj = request.get("instanceId");
+        if (moduleIdObj == null || instanceIdObj == null) {
+            return Result.error("moduleId 和 instanceId 不能为空");
+        }
+
+        Long moduleId = Long.valueOf(moduleIdObj.toString());
+        Long instanceId = Long.valueOf(instanceIdObj.toString());
         String gitBranch = (String) request.getOrDefault("gitBranch", "main");
         String gitCommit = (String) request.get("gitCommit");
         String operator = (String) request.getOrDefault("operator", "system");
 
-        // 保存 branch 和 commit 到 DeployRecord
         Long recordIdResult = deployService.deploy(moduleId, instanceId, operator).getData();
         if (recordIdResult != null) {
-            // 更新 branch 和 commit 信息
             DeployRecord record = new DeployRecord();
             record.setId(recordIdResult);
             record.setGitBranch(gitBranch);
             record.setGitCommit(gitCommit);
-            // TODO: update via mapper
+            deployRecordMapper.updateById(record);
+            log.info("已更新部署记录 {} 的 gitBranch={} gitCommit={}", recordIdResult, gitBranch, gitCommit);
         }
 
         return Result.success(recordIdResult);
