@@ -26,9 +26,17 @@
           <el-icon><Cpu /></el-icon>
           <span>服务管理</span>
         </el-menu-item>
+        <el-menu-item index="/schedules">
+          <el-icon><Timer /></el-icon>
+          <span>定时发版</span>
+        </el-menu-item>
         <el-menu-item index="/operation-logs">
           <el-icon><Document /></el-icon>
           <span>操作日志</span>
+        </el-menu-item>
+        <el-menu-item index="/settings">
+          <el-icon><Setting /></el-icon>
+          <span>系统设置</span>
         </el-menu-item>
       </el-menu>
     </el-aside>

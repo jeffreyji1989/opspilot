@@ -14,7 +14,9 @@ const routes = [
       { path: 'git-credentials', name: 'GitCredentials', component: () => import('../views/GitCredentials.vue'), meta: { title: 'Git认证管理' } },
       { path: 'services', name: 'Services', component: () => import('../views/Services.vue'), meta: { title: '服务管理' } },
       { path: 'services/:id', name: 'ServiceDetail', component: () => import('../views/ServiceDetail.vue'), meta: { title: '服务详情' } },
+      { path: 'schedules', name: 'Schedules', component: () => import('../views/Schedules.vue'), meta: { title: '定时发版' } },
       { path: 'operation-logs', name: 'OperationLogs', component: () => import('../views/OperationLogs.vue'), meta: { title: '操作日志' } },
+      { path: 'settings', name: 'SystemSettings', component: () => import('../views/SystemSettings.vue'), meta: { title: '系统设置' } },
     ]
   }
 ]

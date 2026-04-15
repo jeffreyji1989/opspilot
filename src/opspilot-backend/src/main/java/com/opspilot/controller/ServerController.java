@@ -12,6 +12,9 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/servers")
 @RequiredArgsConstructor
@@ -27,6 +30,12 @@ public class ServerController {
             @RequestParam(required = false) Integer envType,
             @RequestParam(required = false) String keyword) {
         return Result.success(PageResult.of(serverService.pageServers(pageNum, pageSize, envType, keyword)));
+    }
+
+    /** 按环境分组查询服务器 */
+    @GetMapping("/by-env")
+    public Result<Map<Integer, List<Server>>> listByEnv() {
+        return Result.success(serverService.listServersByEnv());
     }
 
     @GetMapping("/{id}")

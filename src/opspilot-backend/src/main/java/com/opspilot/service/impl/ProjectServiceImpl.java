@@ -19,6 +19,14 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 
+/**
+ * 项目服务实现
+ *
+ * <p>提供项目的分页查询、唯一性校验、删除校验等功能。</p>
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 @Service
 @RequiredArgsConstructor
 public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> implements ProjectService {
@@ -42,71 +50,26 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     }
 
     @Override
-    public List<Module> getModulesByProjectId(Long projectId) {
-        return moduleMapper.selectList(
-                new LambdaQueryWrapper<Module>()
-                        .eq(Module::getProjectId, projectId)
-                        .orderByAsc(Module::getCreatedTime));
+    public boolean existsByProjectCode(String projectCode, Long excludeId) {
+        if (!StringUtils.hasText(projectCode)) {
+            return false;
+        }
+        LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<Project>()
+                .eq(Project::getProjectCode, projectCode);
+        if (excludeId != null) {
+            wrapper.ne(Project::getId, excludeId);
+        }
+        return count(wrapper) > 0;
     }
 
     @Override
-    @Transactional
-    public Module addModule(Long projectId, Module module) {
-        // Check project exists
-        if (getById(projectId) == null) {
-            throw new BusinessException("项目不存在");
-        }
-        // Check module name uniqueness within project
-        long count = moduleMapper.selectCount(
-                new LambdaQueryWrapper<Module>()
-                        .eq(Module::getProjectId, projectId)
-                        .eq(Module::getModuleName, module.getModuleName()));
-        if (count > 0) {
-            throw new BusinessException("该模块名称已存在");
-        }
-        module.setProjectId(projectId);
-        if (!StringUtils.hasText(module.getBuildTool())) {
-            module.setBuildTool("maven");
-        }
-        moduleMapper.insert(module);
-        return module;
-    }
-
-    @Override
-    @Transactional
-    public void updateModule(Module module) {
-        if (module.getId() == null || moduleMapper.selectById(module.getId()) == null) {
-            throw new BusinessException("模块不存在");
-        }
-        moduleMapper.updateById(module);
-    }
-
-    @Override
-    @Transactional
-    public void deleteModule(Long moduleId) {
-        Module module = moduleMapper.selectById(moduleId);
-        if (module == null) {
-            throw new BusinessException("模块不存在");
-        }
-        // Check if any service uses this module
-        long count = serviceInstanceMapper.selectCount(
-                new LambdaQueryWrapper<ServiceInstance>().eq(ServiceInstance::getModuleId, moduleId));
-        if (count > 0) {
-            throw new BusinessException("该模块下还有服务实例，无法删除");
-        }
-        moduleMapper.deleteById(moduleId);
-    }
-
-    @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void deleteProject(Long id) {
-        // Check associated modules
         long moduleCount = moduleMapper.selectCount(
                 new LambdaQueryWrapper<Module>().eq(Module::getProjectId, id));
         if (moduleCount > 0) {
             throw new BusinessException(30002, "项目下存在模块，不允许删除");
         }
-        // Check associated service instances (via module)
         List<Module> modules = moduleMapper.selectList(
                 new LambdaQueryWrapper<Module>().eq(Module::getProjectId, id));
         if (!modules.isEmpty()) {
@@ -117,6 +80,6 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 throw new BusinessException(30003, "项目下存在服务实例，不允许删除");
             }
         }
-        this.removeById(id);
+        removeById(id);
     }
 }

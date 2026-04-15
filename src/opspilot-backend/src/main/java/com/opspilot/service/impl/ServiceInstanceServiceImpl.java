@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.opspilot.common.BusinessException;
 import com.opspilot.common.SshManager;
+import com.opspilot.entity.DeployRecord;
 import com.opspilot.entity.Module;
 import com.opspilot.entity.Server;
 import com.opspilot.entity.ServiceInstance;
+import com.opspilot.mapper.DeployRecordMapper;
 import com.opspilot.mapper.ModuleMapper;
 import com.opspilot.mapper.ServerMapper;
 import com.opspilot.mapper.ServiceInstanceMapper;
@@ -20,6 +22,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 服务实例服务实现类
+ *
+ * @author opspilot-team
+ * @since 2026-04-13
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,6 +39,7 @@ public class ServiceInstanceServiceImpl extends ServiceImpl<ServiceInstanceMappe
 
     private final ServerMapper serverMapper;
     private final ModuleMapper moduleMapper;
+    private final DeployRecordMapper deployRecordMapper;
     private final SshManager sshManager;
 
     @Override
@@ -58,13 +71,13 @@ public class ServiceInstanceServiceImpl extends ServiceImpl<ServiceInstanceMappe
 
         save(instance);
 
-        // Create directory structure via SSH
+        // Create directory structure via SSH: deployPath/versions/current/releases + build + logs + scripts
         try {
             SSHClient ssh = sshManager.connect(server);
             try {
                 String base = instance.getDeployPath();
                 sshManager.executeCommand(ssh, String.format(
-                        "mkdir -p %s/versions %s/build %s/logs %s/scripts", base, base, base, base), 15);
+                        "mkdir -p %s/versions/current/releases %s/build %s/logs %s/scripts", base, base, base, base), 15);
                 log.info("Deploy directories created at {}", base);
             } finally {
                 ssh.close();
@@ -181,6 +194,78 @@ public class ServiceInstanceServiceImpl extends ServiceImpl<ServiceInstanceMappe
         } catch (Exception e) {
             throw new BusinessException("获取进程信息失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public List<DeployRecord> getVersions(Long instanceId) {
+        LambdaQueryWrapper<DeployRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DeployRecord::getInstanceId, instanceId)
+                .ne(DeployRecord::getDeployType, "rollback")
+                .orderByDesc(DeployRecord::getCreateTime)
+                .last("LIMIT 50");
+        return deployRecordMapper.selectList(wrapper);
+    }
+
+    @Override
+    public Map<String, Object> getConfig(Long instanceId) {
+        ServiceInstance inst = getByIdWithChecks(instanceId);
+        Map<String, Object> config = new HashMap<>();
+        config.put("instanceId", inst.getId());
+        config.put("instanceName", inst.getInstanceName());
+        config.put("deployPath", inst.getDeployPath());
+        config.put("listenPort", inst.getListenPort());
+        config.put("healthCheckPath", inst.getHealthCheckPath());
+        config.put("healthCheckPort", inst.getHealthCheckPort());
+        config.put("runtimeType", inst.getRuntimeType());
+        config.put("runtimeVersion", inst.getRuntimeVersion());
+        config.put("jvmOptions", inst.getJvmOptions());
+        config.put("startCommand", inst.getStartCommand());
+        config.put("currentVersion", inst.getCurrentVersion());
+        return config;
+    }
+
+    @Override
+    public Map<String, Object> getMonitor(Long instanceId) {
+        ServiceInstance inst = getByIdWithChecks(instanceId);
+        Server server = serverMapper.selectById(inst.getServerId());
+        Map<String, Object> monitor = new HashMap<>();
+        try {
+            SSHClient ssh = sshManager.connect(server);
+
+            // CPU usage
+            String cpuCmd = "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' 2>/dev/null || echo 'N/A'";
+            String cpu = sshManager.executeCommand(ssh, cpuCmd, 5).trim();
+            monitor.put("cpu", cpu);
+
+            // Memory usage
+            String memCmd = "free -m | awk 'NR==2{printf \"%.1f/%.0f MB (%.1f%%)\", $3,$2,$3*100/$2}' 2>/dev/null || echo 'N/A'";
+            String mem = sshManager.executeCommand(ssh, memCmd, 5).trim();
+            monitor.put("memory", mem);
+
+            // Disk usage
+            String diskCmd = String.format("df -h %s | awk 'NR==2{printf \"%s/%s (%s used)\", $3,$2,$5}' 2>/dev/null || echo 'N/A'",
+                    inst.getDeployPath());
+            String disk = sshManager.executeCommand(ssh, diskCmd, 5).trim();
+            monitor.put("disk", disk);
+
+            // Process CPU/MEM for the service
+            if (inst.getPid() != null) {
+                String procCmd = String.format("ps -p %d -o %%cpu,%%mem,rss 2>/dev/null | tail -1", inst.getPid());
+                String procInfo = sshManager.executeCommand(ssh, procCmd, 5).trim();
+                monitor.put("process", procInfo);
+            }
+
+            // System uptime
+            String uptimeCmd = "uptime -p 2>/dev/null || uptime";
+            String uptime = sshManager.executeCommand(ssh, uptimeCmd, 5).trim();
+            monitor.put("systemUptime", uptime);
+
+            ssh.close();
+        } catch (Exception e) {
+            log.error("获取监控数据失败: {}", e.getMessage());
+            monitor.put("error", e.getMessage());
+        }
+        return monitor;
     }
 
     private ServiceInstance getByIdWithChecks(Long id) {

@@ -2,9 +2,9 @@ package com.opspilot.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
@@ -29,7 +29,7 @@ public class AsyncConfig {
      * @return 部署任务线程池
      */
     @Bean("deployTaskExecutor")
-    public Executor deployTaskExecutor() {
+    public TaskExecutor deployTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         // 核心线程数：常驻线程数量
         executor.setCorePoolSize(5);
